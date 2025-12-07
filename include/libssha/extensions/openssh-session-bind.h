@@ -19,7 +19,6 @@
 #include <libssha/extensions/extension.h>
 #include <libssha/utils/serializer.h>
 #include <libssha/utils/deserializer.h>
-#include <botan/secmem.h>
 #include <memory>
 #include <string>
 #include <libssha/utils/logger.h>

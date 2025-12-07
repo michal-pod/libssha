@@ -112,7 +112,6 @@ namespace nglab
             PubKeyItemList items;
 
             IdentitiesAnswerMessage msg;
-            size_t count = 0;
             for (const auto &key : m_keys)
             {
                 if (key->permitted(session, ""))

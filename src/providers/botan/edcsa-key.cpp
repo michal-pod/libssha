@@ -42,7 +42,7 @@ namespace nglab
             Deserializer d(blob);
 
             // string m_type_name = d.readBlob();
-            string m_curve_name = d.readString();
+            m_curve_name = d.readString();
             vector<uint8_t> pub_data = d.readBlob();
             secure_vector<uint8_t> priv_key = d.readMPIntSecure();
 
@@ -153,7 +153,7 @@ namespace nglab
             return "SHA256:" + b64;
         }
 
-        std::vector<uint8_t> ECDSAKey::sign(const std::vector<uint8_t> &data, uint32_t flags) const
+        std::vector<uint8_t> ECDSAKey::sign(const std::vector<uint8_t> &data, [[maybe_unused]] uint32_t flags) const
         {
             Botan::AutoSeeded_RNG rng;
             Botan::PK_Signer signer(*m_priv_key, rng, m_signature_algorithm, Botan::Signature_Format::DerSequence);
@@ -166,8 +166,6 @@ namespace nglab
                 .decode(r_param)
                 .decode(s_param)
                 .end_cons();
-
-            const size_t len = m_priv_key->domain().get_order().bytes(); // długość składników w bajtach
 
             // Prepare the signature blob as per SSH format
             auto r_bytes = r_param.serialize();

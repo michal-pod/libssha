@@ -3,23 +3,22 @@
 # for integration tests.
 
 # Instances will listen on different ports as specified in the test setup.
-ListenAddress 127.0.0.1:${SSH_PORT}
+ListenAddress 127.0.0.1:@SSHD_PORT@
 
 # Disable DNS lookups for faster connections in tests
 UseDNS no
 
 # Specify the location of host keys
-HostKey ${CMAKE_CURRENT_BINARY_DIR}/${HOST_NAME}/host_rsa
-HostKey ${CMAKE_CURRENT_BINARY_DIR}/${HOST_NAME}/host_ecdsa256
-HostKey ${CMAKE_CURRENT_BINARY_DIR}/${HOST_NAME}/host_ecdsa384
-HostKey ${CMAKE_CURRENT_BINARY_DIR}/${HOST_NAME}/host_ecdsa521
-HostKey ${CMAKE_CURRENT_BINARY_DIR}/${HOST_NAME}/host_ed25519
-
+HostKey @DATA_DIR@/@SSHD_INSTANCE_NAME@_rsa
+HostKey @DATA_DIR@/@SSHD_INSTANCE_NAME@_ecdsa256
+HostKey @DATA_DIR@/@SSHD_INSTANCE_NAME@_ecdsa384
+HostKey @DATA_DIR@/@SSHD_INSTANCE_NAME@_ecdsa521
+HostKey @DATA_DIR@/@SSHD_INSTANCE_NAME@_ed25519
 # Specify the location of the PID file
-PidFile ${CMAKE_CURRENT_BINARY_DIR}/${HOST_NAME}/sshd.pid
+PidFile @DATA_DIR@/@SSHD_INSTANCE_NAME@_sshd.pid
 
 # Specify the location of the authorized keys file
-AuthorizedKeysFile ${CMAKE_CURRENT_BINARY_DIR}/home/.ssh/authorized_keys
+AuthorizedKeysFile @DATA_DIR@/authorized_keys
 # Use only public key authentication for tests
 # Disable other authentication methods
 ChallengeResponseAuthentication no
@@ -32,4 +31,4 @@ PubkeyAuthentication yes
 HostKeyAlgorithms +ssh-rsa,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,ssh-ed25519
 
 # Environment variables for the test environment
-SetEnv HOME=${CMAKE_CURRENT_BINARY_DIR}/home LD_PRELOAD=${CMAKE_CURRENT_BINARY_DIR}/libhome_replace.so FAKE_HOME=${CMAKE_CURRENT_BINARY_DIR}/home
+SetEnv HOME=@DATA_DIR@/home LD_PRELOAD=@DATA_DIR@/libhome_replace.so FAKE_HOME=@DATA_DIR@/home

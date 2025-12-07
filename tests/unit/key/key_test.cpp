@@ -32,8 +32,8 @@ class DummyKey : public nglab::libssha::Key<DummyKey, type_name>
 public:
     DummyKey() = default;
     std::vector<uint8_t> pubBlob() override { return std::vector<uint8_t>{0x01, 0x02, 0x03}; }
-    std::string fingerprint(nglab::libssha::PubKeyBase::FingerprintFormat type = nglab::libssha::PubKeyBase::FingerprintFormat::Sha256Base64) const override { return "dummy-fingerprint"; }
-    std::vector<uint8_t> sign(const std::vector<uint8_t> &data, uint32_t flags) const override { return std::vector<uint8_t>{0x04, 0x05, 0x06}; }
+    std::string fingerprint([[maybe_unused]] nglab::libssha::PubKeyBase::FingerprintFormat type = nglab::libssha::PubKeyBase::FingerprintFormat::Sha256Base64) const override { return "dummy-fingerprint"; }
+    std::vector<uint8_t> sign([[maybe_unused]] const std::vector<uint8_t> &data, [[maybe_unused]] uint32_t flags) const override { return std::vector<uint8_t>{0x04, 0x05, 0x06}; }
     void lock(nglab::libssha::secure_vector<uint8_t>& password) override {
         // FIXME: implement key locking
         locked = true;

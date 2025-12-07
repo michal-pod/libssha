@@ -81,7 +81,7 @@ namespace nglab
              */
             static void registerType()
             {
-                if (ext_type == ExtensionType::MessageExtension)
+                if constexpr(ext_type == ExtensionType::MessageExtension)
                 {
                     ExtensionFactory::instance().registerMessageExtension(
                         ext_name,
@@ -90,7 +90,7 @@ namespace nglab
                             return std::make_shared<T>();
                         });
                 }
-                else if (ext_type == ExtensionType::ConstraintExtension)
+                else if constexpr(ext_type == ExtensionType::ConstraintExtension)
                 {
                     ExtensionFactory::instance().registerConstraintExtension(
                         ext_name,

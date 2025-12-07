@@ -29,7 +29,10 @@
 #include <libssha/messages/userauth-request.h>
 #include <libssha/agent/session.h>
 #include <libssha/key/key-manager.h>
+#include "config.h"
+#ifdef USE_BOTAN
 #include <libssha/providers/botan/botan-lock-provider.h>
+#endif
 #include <csignal>
 
 class TestSession : public nglab::libssha::Session
@@ -116,9 +119,12 @@ int main(int argc, char **argv)
 
     using namespace nglab::libssha;
     auto &key_manager = KeyManager::instance();
+    (void)key_manager;
     KeyFactory::initializeKeyTypes();
     ExtensionFactory::initializeExtensions();
+    #ifdef USE_BOTAN
     KeyManager::setLockProvider(new BotanLockProvider());
+    #endif
 
     Logger log(Logger::instance(), "test-agent");
 

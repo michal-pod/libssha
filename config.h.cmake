@@ -1,2 +1,2 @@
 #pragma once
-#cmakedefine USE_BOTAN 
+#mesondefine USE_BOTAN 

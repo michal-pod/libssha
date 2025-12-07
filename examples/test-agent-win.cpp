@@ -55,11 +55,11 @@ public:
 
         BOOL bConnected = ConnectNamedPipe(m_hPipe, &m_ovConnect);
         DWORD dwError = GetLastError();
-        if (!bConnected && GetLastError() == ERROR_IO_PENDING)
+        if (!bConnected && dwError == ERROR_IO_PENDING)
         {
             log.info("Waiting for client to connect...");
         }
-        else if (!bConnected && GetLastError() == ERROR_PIPE_CONNECTED)
+        else if (!bConnected && dwError == ERROR_PIPE_CONNECTED)
         {
             SetEvent(m_hEventConnect);
         }
@@ -110,12 +110,12 @@ public:
         return true;
     }
 
-    bool requiresConfirmation(const KeyBasePtr key) const override
+    bool requiresConfirmation([[maybe_unused]] const KeyBasePtr key) const override
     {
         return false;
     }
 
-    bool processExtensionMessage(const ExtensionMessage &msg) override
+    bool processExtensionMessage([[maybe_unused]] const ExtensionMessage &msg) override
     {
         return false;
     }
@@ -443,11 +443,11 @@ private:
     std::vector<std::unique_ptr<TestSession>> m_Clients;
 };
 
-int main(int argc, char *argv[])
+int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[])
 {
     Logger::instance().info("Application started");
 
-    auto &key_manager = KeyManager::instance();
+    [[maybe_unused]] auto &key_manager = KeyManager::instance();
     KeyFactory::initializeKeyTypes();
     ExtensionFactory::initializeExtensions();
     KeyManager::setLockProvider(new BotanLockProvider());

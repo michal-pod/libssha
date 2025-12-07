@@ -33,7 +33,7 @@ namespace nglab
 {
     namespace libssha
     {
-        Session::Session() : LogEnabler("Session")
+        Session::Session()
         {
         }
 
@@ -306,7 +306,7 @@ namespace nglab
             return true;
         }
 
-        void Session::processRequestIdentities(const Message &msg)
+        void Session::processRequestIdentities([[maybe_unused]] const Message &msg)
         {
             auto &km = KeyManager::instance();
             log.debug("Processing request for identities");

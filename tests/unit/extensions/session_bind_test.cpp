@@ -31,7 +31,7 @@ namespace {
 class DummyPubKey : public PubKeyBase {
 public:
     DummyPubKey(const std::vector<uint8_t>& blob) : PubKeyBase(blob) {}
-    std::string fingerprint(FingerprintFormat format = FingerprintFormat::Sha256Base64) const override { return "dummy-fingerprint"; }
+    std::string fingerprint([[maybe_unused]] FingerprintFormat format = FingerprintFormat::Sha256Base64) const override { return "dummy-fingerprint"; }
     std::vector<std::string> visualHostKey() override { return {}; }
     bool verify(const std::vector<uint8_t>& data, const std::vector<uint8_t>& signature) const override {
                     Deserializer sig_deser(signature);

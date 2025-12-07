@@ -32,7 +32,7 @@ namespace nglab
     {
 
         Ed25519Key::Ed25519Key(const secure_vector<uint8_t> &blob, const std::string &comment)
-            : m_priv_key()
+            : m_priv_key(nullptr)
         {
             setComment(comment);
             Deserializer d(blob);
@@ -40,7 +40,7 @@ namespace nglab
             vector<uint8_t> pub_data = d.readBlob();
             secure_vector<uint8_t> priv_key = d.readBlobSecure();
 
-            m_priv_key = std::make_unique<Botan::Ed25519_PrivateKey>(Botan::secure_vector<uint8_t>(priv_key.begin(), priv_key.end()));
+            m_priv_key = std::make_unique<Botan::Ed25519_PrivateKey>(priv_key);
 
             Serializer s;
             //s.writeBE32(0); // Temporary placeholder for the public key length
@@ -55,7 +55,7 @@ namespace nglab
 
         
 
-        std::vector<uint8_t> Ed25519Key::sign(const std::vector<uint8_t> &data, uint32_t flags) const
+        std::vector<uint8_t> Ed25519Key::sign(const std::vector<uint8_t> &data, [[maybe_unused]] uint32_t flags) const
         {
             Botan::AutoSeeded_RNG rng;
             Botan::PK_Signer signer(*m_priv_key, rng, "");
@@ -93,7 +93,7 @@ namespace nglab
             m_pub_blob = std::vector<unsigned char>(secure_data.begin(), secure_data.end());
         }
 
-        std::vector<uint8_t> Ed448Key::sign(const std::vector<uint8_t> &data, uint32_t flags) const
+        std::vector<uint8_t> Ed448Key::sign(const std::vector<uint8_t> &data, [[maybe_unused]] uint32_t flags) const
         {
             Botan::AutoSeeded_RNG rng;
             Botan::PK_Signer signer(*m_priv_key, rng, "");

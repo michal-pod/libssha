@@ -55,11 +55,11 @@ nglab::libssha::secure_vector<uint8_t> make_ed25519_pub_blob(uint8_t pub_byte = 
 class DummySession : public nglab::libssha::Session {
 public:
     DummySession() : nglab::libssha::LogEnabler("dummy-session"), Session() {}
-    bool confirmRequest(const nglab::libssha::KeyBase &key) override { return true; }
+    bool confirmRequest([[maybe_unused]] const nglab::libssha::KeyBase &key) override { return true; }
     bool send(nglab::libssha::secure_vector<uint8_t>&) override { return true; }
     bool requiresConfirmation(const nglab::libssha::KeyBasePtr) const override { return false; }
     std::string client() const override { return "dummy-client"; }
-    bool processExtensionMessage(const nglab::libssha::ExtensionMessage &msg) override { return false; }
+    bool processExtensionMessage([[maybe_unused]] const nglab::libssha::ExtensionMessage &msg) override { return false; }
 };
 
 class KeyManagerTestFixture : public ::testing::Test {

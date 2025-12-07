@@ -12,33 +12,24 @@ A compact, modular, and extensible SSH agent implementation in C++20 compatible 
 - This library was tested on Debian 13 (GCC 14.2) and MSVC 19.36 (Visual Studio 2022).
 
 ## Quick Start
-- Requirements: a C++20 toolchain, `cmake`, `make` or `ninja`, and the Botan library for the included key provider implementation.
-- When building on Windows, set the `BOTAN_ROOT` CMake cache variable to the root directory of your Botan installation. Remember botan build should match build settings (e.g. MSVC version, Debug/Release). Using for example debug build of Botan with release build of libssha will likely lead to crashes.
+- Requirements: a C++20 toolchain, `meson` and `ninja`, and the Botan library for the included key provider implementation.
+- When building on Windows, you may need to install Botan via conan or vcpkg.
 
-## Build (out-of-tree)
+## Build Instructions
+On Linux you can build the library in stadard way using `meson` and `ninja`, as follows:
 ```bash
-mkdir -p build
-cd build
-cmake ..
-cmake --build . -j$(nproc)
+git clone https://github.com/michal-pod/libssha.git
+cd libssha
+meson setup build
+meson compile -C build
 ```
 
-Run all tests
+Integration tests can be run using:
 ```bash
-cd build
-ctest -j
+meson test -C build
 ```
 
-Run integration tests (scripted, tested only on Linux)
-```bash
-# from repository root
-(cd build/tests/integration && ../../../tests/integration/tests.sh)
-```
-
-Generate coverage (Linux)
-```bash
-./scripts/generate_coverage.sh
-```
+Code coverage can be generated using standard meson coverage tooling.
 
 ## Repository Layout
 - `src/` — library implementation by subsystem (`agent/`, `key/`, `messages/`, `extensions/`, `providers/`, `utils/`).
@@ -53,7 +44,8 @@ Generate coverage (Linux)
 # run from repository root
 ./build/examples/test-agent
 ```
-- Use the library from your project by including `include/libssha` headers and linking the built library from `build/lib` (CMake target names are available in `CMakeLists.txt`).
+- To use the library in your own project, easiest way is to add it as a subproject in your `meson.build`. If you don't use meson, you can create for example in CMake a target that builds the library from source files in `src/` and includes headers from `include/`.
+
 
 ## Projects using this library
 - SKYM - SSH KeY Manager - SSH agent for Windows with GUI, using libssha as the backend library - I'm preparing a separate repository for this project.
