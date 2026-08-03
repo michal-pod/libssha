@@ -23,6 +23,7 @@
 #include <cstdint>
 #include "match-info.h"
 #include <thread>
+#include <atomic>
 
 namespace nglab
 {
@@ -214,8 +215,8 @@ namespace nglab
             std::string m_from_host;
             std::string m_to_host;
             secure_vector<uint8_t> m_temp_buffer;
-            bool m_waiting_for_confirmation{false};
-            bool m_waiting_for_key_selection{false};
+            std::atomic_bool m_waiting_for_confirmation{false};
+            std::atomic_bool m_waiting_for_key_selection{false};
             std::thread m_confirmation_thread;
             std::thread m_key_selection_thread;
             bool m_is_forwarded{false};

@@ -20,6 +20,9 @@
 #include <set>
 #include <vector>
 #include <memory>
+#include <mutex>
+#include <atomic>
+
 #include <libssha/utils/secure_vector.h>
 #include <libssha/messages/identities-answer.h>
 #include <libssha/messages/add-identity.h>
@@ -58,7 +61,10 @@ namespace nglab
             }
 
             /**
-             * @brief Add a key to the key manager
+             * @brief Add a key to the key manager. This method is used internally by addKey(AddIdentityMessage &msg)
+             * and should not be called directly.
+             * 
+             * This method is used also for unit testing purposes, to add keys without going through the message parsing.
              * @param type The key type (e.g., "ssh-ed25519", "ssh-rsa", etc.)
              * @param blob The key blob
              * @param comment The key comment
@@ -174,22 +180,24 @@ namespace nglab
              * @brief Get the list of all keys
              * @return const KeyList& The list of keys
              */
-            const KeyList &keys() const { return m_keys; }
+            size_t keyCount() const;
 
         private:
             KeyManager();
-            KeyList::iterator findKey(const std::vector<uint8_t> &key_blob);
+            KeyBasePtr findKey(const std::vector<uint8_t> &key_blob);
+            KeyBasePtr findKeyNoLock(const std::vector<uint8_t> &key_blob);
             KeyList m_keys;
-            bool m_locked{false};
-            std::set<KeyManagerObserver *> m_observers;
+            std::atomic_bool m_locked{false};
+            std::set<KeyManagerObserver *> m_observers;            
             size_t m_failed_attempts{0};
             std::chrono::steady_clock::time_point m_locked_until;
             std::unique_ptr<LockProvider> m_lock_provider;
+            mutable std::mutex m_observer_mutex;
+            mutable std::mutex m_state_mutex;
 
             // Event emiters
-            void emitKeyAdded(KeyBasePtr key) const;
-            void emitKeyPreRemove(KeyBasePtr key) const;
-            void emitKeyRemoved(const std::string &fingerprint) const;
+            void emitKeyAdded(KeyBasePtr key) const;            
+            void emitKeyRemoved(KeyBasePtr key) const;
             void emitKeysCleared() const;
             void emitLocked() const;
             void emitUnlocked() const;

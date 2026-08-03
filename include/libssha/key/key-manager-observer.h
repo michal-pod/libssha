@@ -51,15 +51,10 @@ namespace nglab
              */
             virtual void onKeyAdded(KeyBasePtr key) = 0;
             /**
-             * @brief Called before a key is removed from the KeyManager.
-             * @param key The key that is about to be removed.
-             */
-            virtual void onKeyPreRemove(KeyBasePtr key) = 0;
-            /**
              * @brief Called when a key was removed from the KeyManager.
              * @param fingerprint The fingerprint of the key that was removed.
              */
-            virtual void onKeyRemoved(const std::string &fingerprint) = 0;
+            virtual void onKeyRemoved(KeyBasePtr key) = 0;
             /**
              * @brief Called when all keys are cleared from the KeyManager.
              */

@@ -102,6 +102,12 @@ namespace nglab
                     throw std::logic_error("Multiple connections using single Session instance");
                 }
 
+                m_waiting_for_confirmation.exchange(true);
+
+                // At this point thread should end work, make sure to join it before starting new one
+                if(m_confirmation_thread.joinable())
+                    m_confirmation_thread.join();
+
                 // Copy data to avoid dangling pointer in another thread
                 std::vector<uint8_t> msg_data(data, data + length);
 
@@ -109,10 +115,9 @@ namespace nglab
                                                     {
                     // Message data should not get out of scope until processing is done
                     // because socket should be blocked
-                    m_waiting_for_confirmation = true;
                     Message msg(msg_data.data(), msg_data.size());
                     processSignRequest(msg);
-                    m_waiting_for_confirmation = false; });
+                    m_waiting_for_confirmation.exchange(false); });
 
                 if (!m_async_operation)
                 {
@@ -123,20 +128,23 @@ namespace nglab
             }
             else if (msg.type() == SSH_AGENTC_REQUEST_IDENTITIES)
             {
-                if (m_waiting_for_key_selection)
+                if (m_waiting_for_key_selection.exchange(true))
                 {
                     throw std::logic_error("Multiple connections using single Session instance");
                 }
+
+                // At this point thread should end work, make sure to join it before starting new one
+                if(m_key_selection_thread.joinable())
+                    m_key_selection_thread.join();
 
                 // Copy data to avoid dangling pointer in another thread
                 std::vector<uint8_t> msg_data(data, data + length);
 
                 m_key_selection_thread = std::thread([this, msg_data]()
                                                      {
-                    m_waiting_for_key_selection = true;
                     Message msg(msg_data.data(), msg_data.size());
                     processRequestIdentities(msg);
-                    m_waiting_for_key_selection = false;
+                    m_waiting_for_key_selection.exchange(false);
                     });
 
                 if (!m_async_operation)
