@@ -294,7 +294,7 @@ namespace nglab
                     }
                 }
 
-                auto signature = key->sign(sign_msg.data(), sign_msg.flags());
+                auto signature = km.signData(sign_msg.keyBlob(), sign_msg.data(), sign_msg.flags());
 
                 km.emitKeyUsed(key, this);
 

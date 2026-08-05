@@ -140,11 +140,20 @@ namespace nglab
 
         std::vector<uint8_t> KeyManager::signData(const std::vector<uint8_t> &key_blob, const std::vector<uint8_t> &data, uint32_t flags)
         {
-            auto key = findKey(key_blob);
+            std::lock_guard<std::mutex> lock(m_state_mutex);
+
+            if(m_locked.load())
+            {
+                throw std::runtime_error("Agent is locked, cannot sign data");
+            }
+
+            auto key = findKeyNoLock(key_blob);
+
             if (key)
             {
                 return key->sign(data, flags);
             }
+            
             throw std::runtime_error("Key not found");
         }
 
