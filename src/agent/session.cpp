@@ -45,146 +45,212 @@ namespace nglab
 
         void Session::joinWorkers()
         {
-            if (m_confirmation_thread.joinable())
-            {
-                m_confirmation_thread.join();
-            }
+            stopProcessing();
 
-            if (m_key_selection_thread.joinable())
+            if (m_worker.joinable())
             {
-                m_key_selection_thread.join();
+                m_worker.join();
             }
+        }
+
+        void Session::stopProcessing()
+        {
+            std::lock_guard<std::mutex> lock(m_queue_mutex);
+            m_stopping = true;
+            m_requests.clear();
+            m_queue_cv.notify_all();
+        }
+
+        bool Session::hasPendingOperations() const
+        {
+            std::lock_guard<std::mutex> lock(m_queue_mutex);
+            return m_processing || !m_requests.empty();
         }
 
         bool Session::process(const uint8_t *data, size_t length)
         {
-            if (m_temp_buffer.size() > 0)
+            std::unique_lock<std::mutex> lock(m_queue_mutex);
+            if (m_stopping)
             {
-                m_temp_buffer.insert(m_temp_buffer.end(), data, data + length);
-                bool result = processReal(m_temp_buffer.data(), m_temp_buffer.size());
-                m_temp_buffer.clear();
-                return result;
+                return false;
             }
 
-            if (length < 5)
+            m_input_buffer.insert(m_input_buffer.end(), data, data + length);
+
+            while (m_input_buffer.size() >= 4)
             {
-                m_temp_buffer.insert(m_temp_buffer.end(), data, data + length);
+                const uint32_t message_length = (static_cast<uint32_t>(m_input_buffer[0]) << 24) |
+                                                (static_cast<uint32_t>(m_input_buffer[1]) << 16) |
+                                                (static_cast<uint32_t>(m_input_buffer[2]) << 8) |
+                                                static_cast<uint32_t>(m_input_buffer[3]);
+
+                // Like OpenSSH, a message that cannot be framed closes the connection
+                if (message_length == 0 || message_length > MaxMessageLength)
+                {
+                    log.error("Invalid message length {}, closing connection", message_length);
+                    m_input_buffer.clear();
+                    return false;
+                }
+
+                const size_t frame_length = 4 + static_cast<size_t>(message_length);
+                if (m_input_buffer.size() < frame_length)
+                {
+                    break;
+                }
+
+                if (m_requests.size() >= MaxQueuedRequests)
+                {
+                    log.error("Too many queued requests, closing connection");
+                    m_input_buffer.clear();
+                    return false;
+                }
+
+                m_requests.emplace_back(m_input_buffer.begin(), m_input_buffer.begin() + frame_length);
+                m_input_buffer.erase(m_input_buffer.begin(), m_input_buffer.begin() + frame_length);
+            }
+
+            if (m_requests.empty())
+            {
                 return true;
             }
 
-            return processReal(data, length);
+            if (!m_worker.joinable())
+            {
+                m_worker = std::thread(&Session::processQueue, this);
+            }
+            m_queue_cv.notify_all();
+
+            if (!m_async_operation)
+            {
+                m_queue_cv.wait(lock, [this]()
+                                { return m_stopping || (m_requests.empty() && !m_processing); });
+            }
+
+            return true;
         }
 
-        bool Session::processReal(const uint8_t *data, size_t length)
+        void Session::processQueue()
         {
-            Message msg(data, length);
+            std::unique_lock<std::mutex> lock(m_queue_mutex);
+            while (true)
+            {
+                m_queue_cv.wait(lock, [this]()
+                                { return m_stopping || !m_requests.empty(); });
+                if (m_stopping)
+                {
+                    return;
+                }
+
+                auto request = std::move(m_requests.front());
+                m_requests.pop_front();
+                m_processing = true;
+
+                lock.unlock();
+                processRequest(request);
+                lock.lock();
+
+                m_processing = false;
+                m_queue_cv.notify_all();
+            }
+        }
+
+        void Session::processRequest(const secure_vector<uint8_t> &request)
+        {
+            m_responded = false;
+
+            // An exception must not leave the worker thread, it would terminate the process
+            try
+            {
+                dispatchRequest(Message(request.data(), request.size()));
+            }
+            catch (const std::exception &e)
+            {
+                log.error("Failed to process request: {}", e.what());
+            }
+            catch (...)
+            {
+                log.error("Failed to process request: unknown exception");
+            }
+
+            if (!m_responded)
+            {
+                try
+                {
+                    log.warning("Request was not answered, sending failure");
+                    failureResponse();
+                }
+                catch (...)
+                {
+                    log.error("Failed to send failure response");
+                }
+            }
+        }
+
+        void Session::dispatchRequest(const Message &msg)
+        {
             auto &km = KeyManager::instance();
 
-            if (km.isLocked() && msg.type() != SSH_AGENTC_UNLOCK)
+            // Same as OpenSSH: a locked agent lists no keys, still accepts extensions
+            // (session-bind) and refuses everything else except unlock
+            if (km.isLocked() && msg.type() != SSH_AGENTC_UNLOCK && msg.type() != SSH_AGENTC_EXTENSION)
             {
+                if (msg.type() == SSH_AGENTC_REQUEST_IDENTITIES)
+                {
+                    log.info("KeyManager is locked; sending empty identities list");
+                    IdentitiesAnswerMessage response_msg;
+                    auto response = response_msg.serialize();
+                    respond(response);
+                    return;
+                }
+
                 log.warning("KeyManager is locked; rejecting message of type {}", msg.typeName());
                 failureResponse();
-                return false;
+                return;
             }
 
             log.debug("Processing message of type {} ({})", msg.typeName(), msg.type());
             if (msg.type() == SSH_AGENTC_ADD_IDENTITY || msg.type() == SSH_AGENTC_ADD_IDENTITY_CONSTRAINED)
             {
-                return processAddIdentity(msg);
+                processAddIdentity(msg);
             }
             else if (msg.type() == SSH_AGENTC_REMOVE_IDENTITY)
             {
-                return processRemoveIdentity(msg);
+                processRemoveIdentity(msg);
             }
             else if (msg.type() == SSH_AGENTC_REMOVE_ALL_IDENTITIES)
             {
                 processRemoveAllIdentity();
-                return true;
             }
             else if (msg.type() == SSH_AGENTC_SIGN_REQUEST)
             {
-                if (m_waiting_for_confirmation)
-                {
-                    throw std::logic_error("Multiple connections using single Session instance");
-                }
-
-                m_waiting_for_confirmation.exchange(true);
-
-                // At this point thread should end work, make sure to join it before starting new one
-                if(m_confirmation_thread.joinable())
-                    m_confirmation_thread.join();
-
-                // Copy data to avoid dangling pointer in another thread
-                std::vector<uint8_t> msg_data(data, data + length);
-
-                m_confirmation_thread = std::thread([this, msg_data]()
-                                                    {
-                    // Message data should not get out of scope until processing is done
-                    // because socket should be blocked
-                    Message msg(msg_data.data(), msg_data.size());
-                    processSignRequest(msg);
-                    m_waiting_for_confirmation.exchange(false); });
-
-                if (!m_async_operation)
-                {
-                    m_confirmation_thread.join();
-                }
-
-                return true;
+                processSignRequest(msg);
             }
             else if (msg.type() == SSH_AGENTC_REQUEST_IDENTITIES)
             {
-                if (m_waiting_for_key_selection.exchange(true))
-                {
-                    throw std::logic_error("Multiple connections using single Session instance");
-                }
-
-                // At this point thread should end work, make sure to join it before starting new one
-                if(m_key_selection_thread.joinable())
-                    m_key_selection_thread.join();
-
-                // Copy data to avoid dangling pointer in another thread
-                std::vector<uint8_t> msg_data(data, data + length);
-
-                m_key_selection_thread = std::thread([this, msg_data]()
-                                                     {
-                    Message msg(msg_data.data(), msg_data.size());
-                    processRequestIdentities(msg);
-                    m_waiting_for_key_selection.exchange(false);
-                    });
-
-                if (!m_async_operation)
-                {
-                    m_key_selection_thread.join();
-                }
-
-                return true;
+                processRequestIdentities(msg);
             }
             else if (msg.type() == SSH_AGENTC_EXTENSION)
             {
-                return processExtension(msg);
+                processExtension(msg);
             }
             else if (msg.type() == SSH_AGENTC_LOCK)
             {
-                return processLock(msg);
+                processLock(msg);
             }
             else if (msg.type() == SSH_AGENTC_UNLOCK)
             {
-                return processUnlock(msg);
+                processUnlock(msg);
             }
             else if (msg.type() == SSH_AGENTC_REMOVE_ALL_RSA_IDENTITIES)
             {
                 // Deprecated message type, treat as REMOVE_ALL_IDENTITIES
                 processRemoveAllIdentity();
-                return true;
             }
             else
             {
                 log.error("Unsupported message type: {} ({})", msg.typeName(), msg.type());
                 failureResponse();
             }
-
-            return false;
         }
 
         bool Session::processAddIdentity(const Message &msg)
@@ -309,7 +375,7 @@ namespace nglab
                 SignResponseMessage response_msg;
                 response_msg.setSignature(signature);
                 auto response = response_msg.serialize();
-                send(response);
+                respond(response);
             }
             catch (const std::exception &e)
             {
@@ -331,13 +397,21 @@ namespace nglab
                 response_msg.addIdentity(item.blob, item.comment);
             }
             auto response = response_msg.serialize();
-            send(response);
+            respond(response);
         }
 
         bool Session::processExtension(const Message &msg)
         {
+            bool session_bind = false;
             try
             {
+                // Read the name first, ExtensionMessage parses (and verifies) the extension
+                // in its constructor and a failed session-bind must be told apart from others
+                Deserializer name_reader(msg.data(), msg.length());
+                name_reader.readBE32();
+                name_reader.readByte();
+                session_bind = name_reader.readString() == "session-bind@openssh.com";
+
                 ExtensionMessage ext_msg(msg);
                 log.debug("Processing extension: {}", ext_msg.extensionName());
 
@@ -347,7 +421,7 @@ namespace nglab
                     return true;
                 }
 
-                if (ext_msg.extensionName() != "session-bind@openssh.com")
+                if (!session_bind)
                 {
                     log.error("Unsupported extension: {}", ext_msg.extensionName());
                     failureResponse();
@@ -367,8 +441,13 @@ namespace nglab
             catch (const std::exception &e)
             {
                 log.error("Failed to process extension message: {}", e.what());
-                m_binding_failed = true;
-                m_session_bindings.clear();
+                // Only a failed session-bind makes destination constrained keys unusable,
+                // as in OpenSSH. Other extensions get just a failure (RFC 9987, section 5.8).
+                if (session_bind)
+                {
+                    m_binding_failed = true;
+                    m_session_bindings.clear();
+                }
                 failureResponse();
                 return false;
             }
@@ -417,14 +496,26 @@ namespace nglab
         {
             SuccessMessage success_msg;
             auto response = success_msg.serialize();
-            send(response);
+            respond(response);
         }
 
         void Session::failureResponse()
         {
             FailureMessage fail_msg;
             auto response = fail_msg.serialize();
-            send(response);
+            respond(response);
+        }
+
+        bool Session::respond(secure_vector<uint8_t> &data)
+        {
+            if (m_responded)
+            {
+                log.error("Request was already answered, dropping another reply");
+                return false;
+            }
+
+            m_responded = true;
+            return send(data);
         }
     }
 }

@@ -40,6 +40,12 @@ class TestSession : public nglab::libssha::Session
 public:
     TestSession(int fd) : Session(), m_fd(fd), LogEnabler("test-session") {}
 
+    ~TestSession()
+    {
+        // The worker thread may still send to the socket
+        joinWorkers();
+    }
+
     bool confirmRequest(const nglab::libssha::KeyBase& key) override
     {
         // For testing, always confi
@@ -191,7 +197,10 @@ int main(int argc, char **argv)
                 log.vdebug("Received {} bytes from fd={}", received, it->fd());
                 if (!it->process(buffer, received))
                 {
-                    log.error("Processing message failed on fd={}", it->fd());
+                    log.error("Invalid message framing, closing fd={}", it->fd());
+                    close(it->fd());
+                    it=sessions.erase(it);
+                    continue;
                 }
 
                 ++it;

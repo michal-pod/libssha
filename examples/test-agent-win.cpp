@@ -67,6 +67,9 @@ public:
 
     ~TestSession()
     {
+        // The worker thread may still send to the pipe
+        joinWorkers();
+
         if (m_hPipe && m_hPipe != INVALID_HANDLE_VALUE)
         {
             FlushFileBuffers(m_hPipe);
@@ -226,10 +229,15 @@ public:
         }
     }
 
-    void onRead(DWORD dwBytesRead)
+    bool onRead(DWORD dwBytesRead)
     {
-        process(m_readBuffer.data(), dwBytesRead);
+        if (!process(m_readBuffer.data(), dwBytesRead))
+        {
+            log.error("Invalid message framing, closing connection");
+            return false;
+        }
         initRead();
+        return true;
     }
 
     HANDLE hEventConnect() const { return m_hEventConnect; }
@@ -273,8 +281,7 @@ public:
             log.info("Read {} bytes from client PID={}", dwBytesRead, m_ulClientPid);
             if (dwBytesRead > 0)
             {
-                onRead(dwBytesRead);
-                return true;
+                return onRead(dwBytesRead);
             }
             else
             {

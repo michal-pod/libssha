@@ -4,7 +4,8 @@ gtest_dep = dependency('gtest')
 
 ssha_test = executable('ssha_test',
     [
-        'main.cpp',        
+        'main.cpp',
+        'agent/session_test.cpp',
         'key/key_test.cpp',
         'key/key_manager_test.cpp',
         'key/pub_key_test.cpp',

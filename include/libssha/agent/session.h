@@ -23,7 +23,9 @@
 #include <cstdint>
 #include "match-info.h"
 #include <thread>
-#include <atomic>
+#include <mutex>
+#include <condition_variable>
+#include <deque>
 
 namespace nglab
 {
@@ -68,12 +70,26 @@ namespace nglab
          * This class manages the lifecycle and message processing for a single SSH agent session,
          * including session bindings, host information, and protocol message handling.
          *
+         * Incoming data is split into frames and complete requests are queued. A single worker
+         * thread handles them one by one, so replies are sent in request order (RFC 9987, section 3)
+         * and each request gets exactly one reply.
+         *
          * For a complete example, see:
          * @see examples/test-agent.cpp
          */
         class Session : virtual public LogEnabler
         {
         public:
+            /**
+             * @brief Maximum length of a single message, same limit as OpenSSH ssh-agent.
+             */
+            static constexpr size_t MaxMessageLength = 256 * 1024;
+
+            /**
+             * @brief Maximum number of requests waiting for the worker thread.
+             */
+            static constexpr size_t MaxQueuedRequests = 16;
+
             /**
              * @brief Constructor for Session.
              */
@@ -87,12 +103,25 @@ namespace nglab
              */
             virtual bool confirmRequest(const KeyBase &key) = 0;
             /**
-             * @brief Process an incoming message.
-             * @param data Pointer to the raw message data.
-             * @param length Length of the raw message data.
-             * @return true if the message was processed successfully, false otherwise.
+             * @brief Process incoming data.
+             *
+             * Data may contain a part of a message or several messages. Complete messages
+             * are queued for the worker thread. Without asynchronous operation the call
+             * returns after all queued requests are processed.
+             * @param data Pointer to the received data.
+             * @param length Length of the received data.
+             * @return false if the data violates message framing or the session is stopped,
+             *         the caller should close the connection then.
              */
             bool process(const uint8_t *data, size_t length);
+
+            /**
+             * @brief Stop processing requests of this session.
+             *
+             * Queued requests are discarded and new data is rejected. A request that is
+             * being processed finishes, see hasPendingOperations().
+             */
+            void stopProcessing();
             /**
              * @brief Send a message.
              * @param data The message data to be sent.
@@ -192,20 +221,17 @@ namespace nglab
             bool isForwarded() const { return m_is_forwarded; }
 
             /**
-             * @brief Check if a worker thread is still processing a request.
+             * @brief Check if the worker thread is still processing a request.
              *
              * While this returns true the worker thread may call virtual methods
              * of this session (send, client, ...), so the session must not be destroyed.
-             * @return true if a sign or identities request is still being processed.
+             * @return true if a request is being processed or waits in the queue.
              */
-            bool hasPendingOperations() const
-            {
-                return m_waiting_for_confirmation || m_waiting_for_key_selection;
-            }
+            bool hasPendingOperations() const;
 
         protected:
             /**
-             * @brief Wait for worker threads to finish.
+             * @brief Stop the worker thread and wait for it to finish.
              *
              * Derived classes must call this at the beginning of their destructor,
              * before releasing anything used by send(). When ~Session runs, the
@@ -214,13 +240,24 @@ namespace nglab
              */
             void joinWorkers();
 
+            /**
+             * @brief Send the reply to the request being processed.
+             *
+             * All replies must go through this method, it makes sure that a request
+             * gets exactly one reply.
+             * @param data The serialized reply.
+             * @return true if the reply was sent, false otherwise.
+             */
+            bool respond(secure_vector<uint8_t> &data);
+
             std::vector<SessionBinding> m_session_bindings;
             MatchInfo m_match_info;
             bool m_async_operation{true};
 
         private:
-            // Message processing methods
-            bool processReal(const uint8_t *data, size_t length);
+            void processQueue();
+            void processRequest(const secure_vector<uint8_t> &request);
+            void dispatchRequest(const Message &msg);
 
             bool processAddIdentity(const Message &msg);
             bool processRemoveIdentity(const Message &msg);
@@ -235,12 +272,20 @@ namespace nglab
             // on confirmation request
             std::string m_from_host;
             std::string m_to_host;
-            secure_vector<uint8_t> m_temp_buffer;
-            std::atomic_bool m_waiting_for_confirmation{false};
-            std::atomic_bool m_waiting_for_key_selection{false};
-            std::thread m_confirmation_thread;
-            std::thread m_key_selection_thread;
             bool m_is_forwarded{false};
+
+            // Used only by the thread calling process()
+            secure_vector<uint8_t> m_input_buffer;
+
+            mutable std::mutex m_queue_mutex;
+            std::condition_variable m_queue_cv;
+            std::deque<secure_vector<uint8_t>> m_requests;
+            bool m_processing{false};
+            bool m_stopping{false};
+            std::thread m_worker;
+
+            // Used only by the worker thread
+            bool m_responded{false};
         };
     }
 }
