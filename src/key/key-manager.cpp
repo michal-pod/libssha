@@ -350,13 +350,10 @@ namespace nglab
 
         void KeyManager::emitKeyRemoved(KeyBasePtr key) const
         {
-            std::set<KeyManagerObserver *> observers_copy;
-            {
-                std::lock_guard<std::mutex> lock(m_observer_mutex);
-                observers_copy = m_observers; // make a copy to avoid holding the lock while notifying
-            }
-
-            for (auto observer : observers_copy)
+            // Holding the lock makes unregisterObserver wait for running callbacks,
+            // so an observer is never called after it has been unregistered
+            std::lock_guard<std::mutex> lock(m_observer_mutex);
+            for (auto observer : m_observers)
             {
                 observer->onKeyRemoved(key);
             }
@@ -364,13 +361,8 @@ namespace nglab
 
         void KeyManager::emitKeysCleared() const
         {
-            std::set<KeyManagerObserver *> observers_copy;
-            {
-                std::lock_guard<std::mutex> lock(m_observer_mutex);
-                observers_copy = m_observers; // make a copy to avoid holding the lock while notifying
-            }
-
-            for (auto observer : observers_copy)
+            std::lock_guard<std::mutex> lock(m_observer_mutex);
+            for (auto observer : m_observers)
             {
                 observer->onKeysCleared();
             }

@@ -150,6 +150,8 @@ namespace nglab
 
             /**
              * @brief Unregister an observer from receiving key manager events
+             *
+             * Waits for callbacks in progress, after return the observer is not called anymore.
              * @param observer The observer to unregister
              */
             static void unregisterObserver(KeyManagerObserver *observer);

@@ -29,16 +29,26 @@ namespace nglab
          *
          * This interface allows implementing classes to receive notifications
          * about key addition and removal events from the KeyManager.
+         *
+         * The observer is not registered automatically. Callbacks are invoked from
+         * other threads, so the implementing class must call
+         * KeyManager::registerObserver() only once it is fully constructed and
+         * KeyManager::unregisterObserver() before its destruction starts.
+         * Registering from a base class constructor would expose a partially
+         * constructed object.
+         *
+         * Callbacks run with the observer list locked, they must not register or
+         * unregister observers.
          */
         class KeyManagerObserver
         {
         public:
-            KeyManagerObserver()
-            {
-                KeyManager::registerObserver(this);
-            }
+            KeyManagerObserver() = default;
             /**
              * @brief Virtual destructor for KeyManagerObserver.
+             *
+             * Unregisters as a safety net only, the derived part is already
+             * destroyed at this point.
              */
             virtual ~KeyManagerObserver()
             {
