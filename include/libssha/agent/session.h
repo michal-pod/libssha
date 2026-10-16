@@ -191,7 +191,28 @@ namespace nglab
 
             bool isForwarded() const { return m_is_forwarded; }
 
+            /**
+             * @brief Check if a worker thread is still processing a request.
+             *
+             * While this returns true the worker thread may call virtual methods
+             * of this session (send, client, ...), so the session must not be destroyed.
+             * @return true if a sign or identities request is still being processed.
+             */
+            bool hasPendingOperations() const
+            {
+                return m_waiting_for_confirmation || m_waiting_for_key_selection;
+            }
+
         protected:
+            /**
+             * @brief Wait for worker threads to finish.
+             *
+             * Derived classes must call this at the beginning of their destructor,
+             * before releasing anything used by send(). When ~Session runs, the
+             * derived part is already destroyed and a worker thread calling a virtual
+             * method would hit a pure virtual call.
+             */
+            void joinWorkers();
 
             std::vector<SessionBinding> m_session_bindings;
             MatchInfo m_match_info;

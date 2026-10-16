@@ -39,6 +39,12 @@ namespace nglab
 
         Session::~Session()
         {
+            // Safety net only, derived classes should have joined already
+            joinWorkers();
+        }
+
+        void Session::joinWorkers()
+        {
             if (m_confirmation_thread.joinable())
             {
                 m_confirmation_thread.join();
