@@ -21,6 +21,7 @@
 #include <libssha/key/key-factory.h>
 #include <libssha/extensions/openssh-restrict-destination.h>
 #include <libssha/key/key-manager-observer.h>
+#include <algorithm>
 #include <mutex>
 #include <list>
 #include <cmath>
@@ -128,7 +129,8 @@ namespace nglab
             IdentitiesAnswerMessage msg;
             for (const auto &key : keys_copy)
             {
-                if (key->permitted(session, ""))
+                // Expired keys wait for cleanupExpiredKeys, they must not be offered meanwhile
+                if (!key->expired() && key->permitted(session, ""))
                 {
                     items.push_back({key->fingerprint(), key->type(), key->comment(), key->pubBlob()});
                 }
@@ -149,7 +151,7 @@ namespace nglab
 
             auto key = findKeyNoLock(key_blob);
 
-            if (key)
+            if (key && !key->expired())
             {
                 return key->sign(data, flags);
             }
@@ -160,7 +162,13 @@ namespace nglab
         KeyBasePtr KeyManager::findKey(const std::vector<uint8_t> &key_blob)
         {
             std::lock_guard<std::mutex> lock(m_state_mutex);
-            return findKeyNoLock(key_blob);
+            auto key = findKeyNoLock(key_blob);
+            // Lifetime must hold without relying on the periodic cleanup
+            if (key && key->expired())
+            {
+                return nullptr;
+            }
+            return key;
         }
 
         KeyBasePtr KeyManager::findKeyNoLock(const std::vector<uint8_t> &key_blob)
@@ -223,7 +231,7 @@ namespace nglab
                                    {
                                        return key->fingerprint() == fingerprint;
                                    });
-            if (it != m_keys.end())
+            if (it != m_keys.end() && !(*it)->expired())
             {
                 return *it;
             }
@@ -407,7 +415,9 @@ namespace nglab
         size_t KeyManager::keyCount() const
         {
             std::lock_guard<std::mutex> lock(m_state_mutex);
-            return m_keys.size();
+            return static_cast<size_t>(std::count_if(m_keys.begin(), m_keys.end(),
+                                                     [](const KeyBasePtr &key)
+                                                     { return !key->expired(); }));
         }
     } // namespace libssha
 } // namespace nglab

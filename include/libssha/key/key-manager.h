@@ -90,7 +90,7 @@ namespace nglab
             void removeAllKeys();
 
             /**
-             * @brief List all keys in the key manager
+             * @brief List all keys permitted for the session, expired keys are skipped
              * @return IdentitiesAnswerMessage The message containing the list of keys
              */
             PubKeyItemList listKeys(const Session &session) const;
@@ -179,8 +179,8 @@ namespace nglab
             void emitKeyDeclined(KeyBasePtr key, const Session *session) const;
 
             /**
-             * @brief Get the list of all keys
-             * @return const KeyList& The list of keys
+             * @brief Get the number of keys that have not expired
+             * @return size_t The number of usable keys
              */
             size_t keyCount() const;
 

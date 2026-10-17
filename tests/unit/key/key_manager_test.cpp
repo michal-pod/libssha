@@ -183,6 +183,31 @@ TEST_F(KeyManagerTestFixture, CleanupExpiredKeysWorks) {
     auto pub_blob2 = make_ed25519_pub_blob(0x02);
     EXPECT_EQ(list[0].blob, std::vector<uint8_t>(pub_blob2.begin(), pub_blob2.end()));
     EXPECT_EQ(list[0].comment, "long-lived");
+
+    // Accessors skip expired keys anyway, make the key valid again to see it was really removed
+    key1->setLifetime(0);
+    EXPECT_EQ(km.getKeyByFingerprint(key1->fingerprint()), nullptr);
+    EXPECT_EQ(km.keyCount(), 1);
+}
+
+TEST_F(KeyManagerTestFixture, ExpiredKeyIsUnusableBeforeCleanup) {
+    auto& km = nglab::libssha::KeyManager::instance();
+    auto key = km.addKey("ssh-ed25519", make_ed25519_blob(), "short-lived");
+    key->setLifetime(1); // 1 second
+    auto pub_blob = make_ed25519_pub_blob();
+    std::vector<uint8_t> pub(pub_blob.begin(), pub_blob.end());
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+
+    EXPECT_TRUE(km.listKeys(session).empty());
+    EXPECT_EQ(km.getKey(pub), nullptr);
+    EXPECT_EQ(km.getKeyByFingerprint(key->fingerprint()), nullptr);
+    EXPECT_EQ(km.keyCount(), 0);
+    EXPECT_THROW(km.signData(pub, {'h', 'e', 'l', 'l', 'o'}, 0), std::runtime_error);
+
+    // Adding the same key again replaces the expired instance
+    km.addKey("ssh-ed25519", make_ed25519_blob(), "again");
+    EXPECT_EQ(km.listKeys(session).size(), 1);
 }
 
 TEST_F(KeyManagerTestFixture, AddKeyFromAddIdentityMessage) {
