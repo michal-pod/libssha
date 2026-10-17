@@ -190,6 +190,20 @@ TEST_F(KeyManagerTestFixture, CleanupExpiredKeysWorks) {
     EXPECT_EQ(km.keyCount(), 1);
 }
 
+TEST_F(KeyManagerTestFixture, KeysSkipsExpiredKeys) {
+    auto& km = nglab::libssha::KeyManager::instance();
+    auto short_lived = km.addKey("ssh-ed25519", make_ed25519_blob(), "short-lived");
+    short_lived->setLifetime(1); // 1 second
+    auto long_lived = km.addKey("ssh-ed25519", make_ed25519_blob(0x02, 0x03), "long-lived");
+    EXPECT_EQ(km.keys().size(), 2);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+
+    auto keys = km.keys();
+    ASSERT_EQ(keys.size(), 1);
+    EXPECT_EQ(keys[0], long_lived);
+}
+
 TEST_F(KeyManagerTestFixture, ExpiredKeyIsUnusableBeforeCleanup) {
     auto& km = nglab::libssha::KeyManager::instance();
     auto key = km.addKey("ssh-ed25519", make_ed25519_blob(), "short-lived");

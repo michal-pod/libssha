@@ -22,6 +22,7 @@
 #include <libssha/extensions/openssh-restrict-destination.h>
 #include <libssha/key/key-manager-observer.h>
 #include <algorithm>
+#include <iterator>
 #include <mutex>
 #include <list>
 #include <cmath>
@@ -150,6 +151,16 @@ namespace nglab
             log.debug("Listing {} from {} identities", items.size(), keys_copy.size());
 
             return items;
+        }
+
+        KeyList KeyManager::keys() const
+        {
+            KeyList result;
+            std::lock_guard<std::mutex> lock(m_state_mutex);
+            std::copy_if(m_keys.begin(), m_keys.end(), std::back_inserter(result),
+                         [](const KeyBasePtr &key)
+                         { return !key->expired(); });
+            return result;
         }
 
         std::vector<uint8_t> KeyManager::signData(const std::vector<uint8_t> &key_blob, const std::vector<uint8_t> &data, uint32_t flags)

@@ -96,6 +96,14 @@ namespace nglab
             PubKeyItemList listKeys(const Session &session) const;
 
             /**
+             * @brief Get all keys that have not expired, regardless of any session
+             *
+             * Intended for user interfaces, e.g. to rebuild a key list after the agent was unlocked.
+             * @return KeyList A copy of the key list
+             */
+            KeyList keys() const;
+
+            /**
              * @brief Sign data with the specified key
              * @param key_blob The key blob of the key to be used for signing
              * @param data The data to be signed
