@@ -38,7 +38,7 @@ namespace nglab
 
         uint32_t Deserializer::readBE32()
         {
-            if (m_offset + 4 > m_length)
+            if (4 > m_length - m_offset)
                 throw std::out_of_range("Not enough data to read uint32_t");
             uint32_t value = (static_cast<uint32_t>(m_data[m_offset]) << 24) |
                              (static_cast<uint32_t>(m_data[m_offset + 1]) << 16) |
@@ -51,7 +51,7 @@ namespace nglab
         std::vector<uint8_t> Deserializer::readBlob()
         {
             uint32_t len = readBE32();
-            if (m_offset + len > m_length)
+            if (len > m_length - m_offset)
                 throw std::out_of_range("Not enough data to read blob");
             std::vector<uint8_t> result(m_data + m_offset, m_data + m_offset + len);
             m_offset += len;
@@ -61,7 +61,7 @@ namespace nglab
         void Deserializer::discardBlob()
         {
             uint32_t len = readBE32();
-            if (m_offset + len > m_length)
+            if (len > m_length - m_offset)
                 throw std::out_of_range("Not enough data to discard blob");
             m_offset += len;
         }
@@ -69,7 +69,7 @@ namespace nglab
         secure_vector<uint8_t> Deserializer::readBlobSecure()
         {
             uint32_t len = readBE32();
-            if (m_offset + len > m_length)
+            if (len > m_length - m_offset)
                 throw std::out_of_range("Not enough data to read secure blob");
 
             secure_vector<uint8_t> result(m_data + m_offset, m_data + m_offset + len);
@@ -79,7 +79,7 @@ namespace nglab
 
         uint8_t Deserializer::readByte()
         {
-            if (m_offset + 1 > m_length)
+            if (1 > m_length - m_offset)
                 throw std::out_of_range("Not enough data to read byte");
             return m_data[m_offset++];
         }
@@ -101,7 +101,7 @@ namespace nglab
         std::vector<uint8_t> Deserializer::readMPInt()
         {
             uint32_t len = readBE32();
-            if (m_offset + len > m_length)
+            if (len > m_length - m_offset)
                 throw std::out_of_range("Not enough data to read mpint");
             std::vector<uint8_t> result(m_data + m_offset, m_data + m_offset + len);
             if (result.size() > 1 && result[0] == 0x00 && (result[1] & 0x80))
@@ -116,7 +116,7 @@ namespace nglab
         secure_vector<uint8_t> Deserializer::readMPIntSecure()
         {
             uint32_t len = readBE32();
-            if (m_offset + len > m_length)
+            if (len > m_length - m_offset)
                 throw std::out_of_range("Not enough data to read mpint");
             secure_vector<uint8_t> result(m_data + m_offset, m_data + m_offset + len);
             if (result.size() > 1 && result[0] == 0x00 && (result[1] & 0x80))
