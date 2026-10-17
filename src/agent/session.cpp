@@ -322,7 +322,7 @@ namespace nglab
                     throw std::runtime_error("Key not found for signing");
                 }
 
-                if (key->destConstraints().size() > 0)
+                if (key->hasDestConstraints())
                 {
                     log.debug("Key has destination constraints, checking against session bindings");
                     if (m_session_bindings.size() == 0)

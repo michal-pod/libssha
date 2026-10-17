@@ -19,6 +19,7 @@
 #include <libssha/utils/secure_vector.h>
 #include <string>
 #include <chrono>
+#include <mutex>
 #include <vector>
 #include <libssha/key/key-factory.h>
 #include <libssha/extensions/openssh-restrict-destination.h>
@@ -129,11 +130,15 @@ namespace nglab
             }
 
             /**
-             * @brief Get the OpenSSH destination constraints associated with the key
-             * @return const std::vector<OpenSSHSDestinationConstraint>& The destination constraints
+             * @brief Get a copy of the OpenSSH destination constraints associated with the key
+             *
+             * Constraints can be changed from another thread (e.g. GUI) while the key is in use,
+             * so a copy is returned instead of a reference.
+             * @return std::vector<OpenSSHSDestinationConstraint> The destination constraints
              */
-            const std::vector<OpenSSHSDestinationConstraint> &destConstraints() const
+            std::vector<OpenSSHSDestinationConstraint> destConstraints() const
             {
+                std::lock_guard<std::mutex> lock(m_constraints_mutex);
                 return m_dest_constraints;
             }
 
@@ -143,6 +148,7 @@ namespace nglab
              */
             void setDestConstraints(const std::vector<OpenSSHSDestinationConstraint> &constraints)
             {
+                std::lock_guard<std::mutex> lock(m_constraints_mutex);
                 m_dest_constraints = constraints;
             }
 
@@ -152,6 +158,7 @@ namespace nglab
              */
             bool hasDestConstraints() const
             {
+                std::lock_guard<std::mutex> lock(m_constraints_mutex);
                 return !m_dest_constraints.empty();
             }
 
@@ -207,7 +214,15 @@ namespace nglab
             std::chrono::steady_clock::time_point m_added_time;
             uint32_t m_lifetime_seconds = 0;
             std::vector<OpenSSHSDestinationConstraint> m_dest_constraints;
+            mutable std::mutex m_constraints_mutex;
             bool m_confirm_required = false;
+
+        private:
+            bool matchesConstraints(const std::vector<OpenSSHSDestinationConstraint> &constraints,
+                                    const std::vector<uint8_t> &from_key,
+                                    const std::vector<uint8_t> &to_key,
+                                    const std::string &user,
+                                    MatchInfoOpt mi) const;
         };
 
         /**

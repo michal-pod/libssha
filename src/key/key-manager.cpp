@@ -36,28 +36,39 @@ namespace nglab
 
         std::shared_ptr<KeyBase> KeyManager::addKey(std::string type, const secure_vector<uint8_t> &blob, const std::string &comment)
         {
-            std::lock_guard<std::mutex> lock(m_state_mutex);
-            auto pubKey = KeyFactory::extractPubKey(type, blob); // just to check if type is supported
-            auto key = findKeyNoLock(pubKey);
-            if (key)
-            {
-                log.info("Key already exists, removing old instance before adding new one");
-                m_keys.erase(std::find(m_keys.begin(), m_keys.end(), key));
-            }
+            auto key = createKey(type, blob, comment);
+            insertKey(key);
+            return key;
+        }
 
-            auto k = KeyFactory::createKey(type, blob, comment);
-            if (!k)
+        KeyBasePtr KeyManager::createKey(const std::string &type, const secure_vector<uint8_t> &blob, const std::string &comment)
+        {
+            KeyFactory::extractPubKey(type, blob); // just to check if type is supported
+            auto key = KeyFactory::createKey(type, blob, comment);
+            if (!key)
             {
                 throw std::runtime_error("Failed to create key of type: " + type);
             }
+            return key;
+        }
 
-            m_keys.push_back(k);
-            return k;
+        void KeyManager::insertKey(KeyBasePtr key)
+        {
+            std::lock_guard<std::mutex> lock(m_state_mutex);
+            auto existing = findKeyNoLock(key->pubBlob());
+            if (existing)
+            {
+                log.info("Key already exists, removing old instance before adding new one");
+                m_keys.erase(std::find(m_keys.begin(), m_keys.end(), existing));
+            }
+
+            m_keys.push_back(key);
         }
 
         void KeyManager::addKey(AddIdentityMessage &msg)
         {
-            auto key = addKey(msg.keyType(), msg.keyBlob(), msg.keyComment());
+            // Other sessions may use the key as soon as it is inserted, so constraints come first
+            auto key = createKey(msg.keyType(), msg.keyBlob(), msg.keyComment());
             if (msg.lifetime() > 0)
             {
                 key->setLifetime(msg.lifetime());
@@ -75,6 +86,7 @@ namespace nglab
                 }
             }
 
+            insertKey(key);
             emitKeyAdded(key);
         }
 

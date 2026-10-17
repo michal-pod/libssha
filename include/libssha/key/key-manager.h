@@ -188,6 +188,9 @@ namespace nglab
             KeyManager();
             KeyBasePtr findKey(const std::vector<uint8_t> &key_blob);
             KeyBasePtr findKeyNoLock(const std::vector<uint8_t> &key_blob);
+            static KeyBasePtr createKey(const std::string &type, const secure_vector<uint8_t> &blob, const std::string &comment);
+            // Publishes a fully configured key, replacing an existing instance of the same key
+            void insertKey(KeyBasePtr key);
             KeyList m_keys;
             std::atomic_bool m_locked{false};
             std::set<KeyManagerObserver *> m_observers;            

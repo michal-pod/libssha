@@ -27,8 +27,17 @@ namespace nglab
                                              const std::string &user,
                                              MatchInfoOpt mi) const
         {
+            return matchesConstraints(destConstraints(), from_key, to_key, user, mi);
+        }
+
+        bool KeyBase::matchesConstraints(const std::vector<OpenSSHSDestinationConstraint> &constraints,
+                                         const std::vector<uint8_t> &from_key,
+                                         const std::vector<uint8_t> &to_key,
+                                         const std::string &user,
+                                         MatchInfoOpt mi) const
+        {
             Logger log(Logger::instance(), "KeyBase::permittedByConstraints");
-            for (const auto &constraint : m_dest_constraints)
+            for (const auto &constraint : constraints)
             {
                 if (constraint.matches(from_key, to_key, user, mi))
                 {
@@ -44,7 +53,9 @@ namespace nglab
         bool KeyBase::permitted(const Session &session, std::string user, MatchInfoOpt mi) const
         {
             Logger log(Logger::instance(), "KeyBase::permitted");
-            if (m_dest_constraints.size() == 0)
+            // One snapshot for all hops, constraints may change in the meantime
+            const auto constraints = destConstraints();
+            if (constraints.empty())
             {
                 log.vdebug("key {} has no destination constraints, permitting by default", comment());
                 return true;
@@ -88,7 +99,7 @@ namespace nglab
                     return false;
                 }
 
-                if (!permittedByConstraints(from_key, s.host_key, user_to_check, mi))
+                if (!matchesConstraints(constraints, from_key, s.host_key, user_to_check, mi))
                 {
                     log.info("key {} not permitted by constraints for session binding {}", comment(), i);
                     return false;
@@ -98,7 +109,7 @@ namespace nglab
             }
 
             auto &last_binding = session.sessionBindings().back();
-            if (last_binding.forwarded && user.empty() && !permittedByConstraints(last_binding.host_key, {}, ""))
+            if (last_binding.forwarded && user.empty() && !matchesConstraints(constraints, last_binding.host_key, {}, "", std::nullopt))
             {
                 log.debug("key {} permitted at host but not after, refusing", comment());
                 return false;
