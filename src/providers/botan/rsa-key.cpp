@@ -57,6 +57,14 @@ namespace nglab
                 d_bi,
                 n_bi);
 
+            // n has to be p * q (weak check, no primality tests), otherwise the agent
+            // would list one key and sign with another
+            Botan::AutoSeeded_RNG rng;
+            if (!m_priv_key->check_key(rng, false))
+            {
+                throw std::runtime_error("RsaKey: public key does not match the private key");
+            }
+
             Serializer s;
             s.writeString("ssh-rsa");
             s.writeMPInt(e);

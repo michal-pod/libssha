@@ -15,6 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with libssha. If not, see <http://www.gnu.org/licenses/>.
  */
+#include <botan/ed25519.h>
 #include <libssha/key/key-manager.h>
 #include <libssha/providers/botan/eddsa-key.h>
 #include <libssha/messages/identities-answer.h>
@@ -30,25 +31,26 @@
 #include <thread>
 #include <chrono>
 
+// Public key of the ed25519 test key with a seed filled with key_byte
+std::vector<uint8_t> ed25519_pub_key(uint8_t key_byte) {
+    return Botan::Ed25519_PrivateKey::from_seed(std::vector<uint8_t>(32, key_byte)).public_key_bits();
+}
+
 // Helper to create a valid ed25519 key blob for testing
-nglab::libssha::secure_vector<uint8_t> make_ed25519_blob(uint8_t pub_byte = 0x01, uint8_t priv_byte = 0x02) {
+nglab::libssha::secure_vector<uint8_t> make_ed25519_blob(uint8_t key_byte = 0x01) {
     nglab::libssha::Serializer s;
-    std::string type = "ssh-ed25519";
-    std::vector<uint8_t> pubkey(32, pub_byte);
-    std::vector<uint8_t> privkey_seed(32, priv_byte);
-    std::vector<uint8_t> privkey(privkey_seed);
+    std::vector<uint8_t> pubkey = ed25519_pub_key(key_byte);
+    std::vector<uint8_t> privkey(32, key_byte);
     privkey.insert(privkey.end(), pubkey.begin(), pubkey.end());
     s.writeBlob(pubkey);
     s.writeSecureBlob(nglab::libssha::secure_vector<uint8_t>(privkey.begin(), privkey.end()));
     return s.dataSecure();
 }
 
-nglab::libssha::secure_vector<uint8_t> make_ed25519_pub_blob(uint8_t pub_byte = 0x01) {
+nglab::libssha::secure_vector<uint8_t> make_ed25519_pub_blob(uint8_t key_byte = 0x01) {
     nglab::libssha::Serializer s;
-    std::string type = "ssh-ed25519";
-    std::vector<uint8_t> pubkey(32, pub_byte);
-    s.writeString(type);
-    s.writeBlob(pubkey);
+    s.writeString("ssh-ed25519");
+    s.writeBlob(ed25519_pub_key(key_byte));
     return s.dataSecure();
 }
 
@@ -128,7 +130,7 @@ TEST_F(KeyManagerTestFixture, RemoveKeyNotFoundReturnsFalse) {
 TEST_F(KeyManagerTestFixture, RemoveAllKeysWorks) {
     auto& km = nglab::libssha::KeyManager::instance();
     auto blob1 = make_ed25519_blob();
-    auto blob2 = make_ed25519_blob(0x02, 0x03);
+    auto blob2 = make_ed25519_blob(0x02);
     km.addKey("ssh-ed25519", blob1, "one");
     km.addKey("ssh-ed25519", blob2, "two");
     km.removeAllKeys();
@@ -170,7 +172,7 @@ TEST_F(KeyManagerTestFixture, SignDataKeyNotFoundThrows) {
 TEST_F(KeyManagerTestFixture, ListKeysReturnsAll) {
     auto& km = nglab::libssha::KeyManager::instance();
     auto blob1 = make_ed25519_blob();
-    auto blob2 = make_ed25519_blob(0x02, 0x03);
+    auto blob2 = make_ed25519_blob(0x02);
     km.addKey("ssh-ed25519", blob1, "one");
     km.addKey("ssh-ed25519", blob2, "two");
     auto list = km.listKeys(session);
@@ -188,7 +190,7 @@ TEST_F(KeyManagerTestFixture, ListKeysReturnsAll) {
 TEST_F(KeyManagerTestFixture, CleanupExpiredKeysWorks) {
     auto& km = nglab::libssha::KeyManager::instance();
     auto blob1 = make_ed25519_blob();
-    auto blob2 = make_ed25519_blob(0x02, 0x03);
+    auto blob2 = make_ed25519_blob(0x02);
     auto key1 = km.addKey("ssh-ed25519", blob1, "short-lived");
     key1->setLifetime(1); // 1 second
     km.addKey("ssh-ed25519", blob2, "long-lived");
@@ -212,7 +214,7 @@ TEST_F(KeyManagerTestFixture, KeysSkipsExpiredKeys) {
     auto& km = nglab::libssha::KeyManager::instance();
     auto short_lived = km.addKey("ssh-ed25519", make_ed25519_blob(), "short-lived");
     short_lived->setLifetime(1); // 1 second
-    auto long_lived = km.addKey("ssh-ed25519", make_ed25519_blob(0x02, 0x03), "long-lived");
+    auto long_lived = km.addKey("ssh-ed25519", make_ed25519_blob(0x02), "long-lived");
     EXPECT_EQ(km.keys().size(), 2);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(1100));

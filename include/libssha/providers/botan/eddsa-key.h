@@ -20,6 +20,7 @@
 #include <botan/ed25519.h>
 #include <botan/ed448.h>
 #include <libssha/utils/secure_vector.h>
+#include <span>
 #include <string>
 #include <vector>
 #include <libssha/providers/botan/botan-lock.h>
@@ -47,6 +48,25 @@ namespace nglab
             virtual std::string fingerprint() const;
 
         protected:
+            /**
+             * @brief Get k from the private key field k || ENC(A) (RFC 9987, section 5.2.3)
+             * @param priv_key The private key field
+             * @param key_length The length of k and of ENC(A)
+             * @return k, a view into priv_key
+             */
+            static std::span<const uint8_t> secretKey(const secure_vector<uint8_t> &priv_key, size_t key_length);
+
+            /**
+             * @brief Set the public key blob (RFC 9987, section 5.3) after checking that
+             *        both copies of ENC(A) are the public key of k
+             * @param type_name The key type name
+             * @param derived The public key derived from k
+             * @param pub_data The public key field ENC(A)
+             * @param priv_key The private key field k || ENC(A)
+             */
+            void setPublicKey(const string &type_name, const std::vector<uint8_t> &derived,
+                              const std::vector<uint8_t> &pub_data, const secure_vector<uint8_t> &priv_key);
+
             vector<uint8_t> m_pub_blob;
         };
 
@@ -73,7 +93,6 @@ namespace nglab
 
         private:
             std::unique_ptr<Botan::Ed25519_PrivateKey> m_priv_key;
-            vector<uint8_t> m_pub_blob;
         };
 
         /**
@@ -99,7 +118,6 @@ namespace nglab
 
         private:
             std::unique_ptr<Botan::Ed448_PrivateKey> m_priv_key;
-            vector<uint8_t> m_pub_blob;
         };
 
     } // namespace libssha

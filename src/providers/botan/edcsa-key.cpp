@@ -43,6 +43,11 @@ namespace nglab
 
             // string m_type_name = d.readBlob();
             m_curve_name = d.readString();
+            // RFC 9987, section 5.2.2: the curve name repeats the curve of the key type
+            if (m_type_name != "ecdsa-sha2-" + m_curve_name)
+            {
+                throw std::runtime_error("ECDSABase: curve " + m_curve_name + " does not match key type " + m_type_name);
+            }
             vector<uint8_t> pub_data = d.readBlob();
             secure_vector<uint8_t> priv_key = d.readMPIntSecure();
 
@@ -86,6 +91,14 @@ namespace nglab
             }
 
             m_priv_key = std::make_unique<Botan::ECDSA_PrivateKey>(domain, priv_scalar.value());
+
+            // Q has to belong to d, otherwise the agent would list one key and sign with another
+            const auto pub_point = Botan::EC_AffinePoint::deserialize(domain, pub_data);
+            if (!pub_point ||
+                pub_point->serialize_uncompressed() != m_priv_key->_public_ec_point().serialize_uncompressed())
+            {
+                throw std::runtime_error("ECDSABase: public key does not match the private key");
+            }
 
             Serializer s;
             s.writeString(m_type_name);

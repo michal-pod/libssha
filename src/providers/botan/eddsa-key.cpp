@@ -24,12 +24,37 @@
 #include <botan/pubkey.h>
 #include <libssha/utils/serializer.h>
 #include <libssha/utils/deserializer.h>
+#include <algorithm>
+#include <span>
 #include <stdexcept>
 
 namespace nglab
 {
     namespace libssha
     {
+        std::span<const uint8_t> EDDSABase::secretKey(const secure_vector<uint8_t> &priv_key, size_t key_length)
+        {
+            if (priv_key.size() != 2 * key_length)
+            {
+                throw std::runtime_error("EdDSA private key has invalid length");
+            }
+            return std::span<const uint8_t>(priv_key.data(), key_length);
+        }
+
+        void EDDSABase::setPublicKey(const string &type_name, const std::vector<uint8_t> &derived,
+                                     const std::vector<uint8_t> &pub_data, const secure_vector<uint8_t> &priv_key)
+        {
+            // Otherwise the agent would list one key and sign with another
+            if (pub_data != derived || !std::equal(derived.begin(), derived.end(), priv_key.end() - derived.size()))
+            {
+                throw std::runtime_error("EdDSA public key does not match the private key");
+            }
+
+            Serializer s;
+            s.writeString(type_name);
+            s.writeBlob(pub_data);
+            m_pub_blob = s.data();
+        }
 
         Ed25519Key::Ed25519Key(const secure_vector<uint8_t> &blob, const std::string &comment)
             : m_priv_key(nullptr)
@@ -40,17 +65,10 @@ namespace nglab
             vector<uint8_t> pub_data = d.readBlob();
             secure_vector<uint8_t> priv_key = d.readBlobSecure();
 
-            m_priv_key = std::make_unique<Botan::Ed25519_PrivateKey>(priv_key);
-
-            Serializer s;
-            //s.writeBE32(0); // Temporary placeholder for the public key length
-            s.writeString(typeName());
-            s.writeBlob(pub_data);
-            //s.writeBE32(s.size()-4, 0);
-            const auto &secure_data = s.data();
-
-            m_pubkey = std::make_unique<ED25519Pub>(std::vector<uint8_t>(secure_data.begin(), secure_data.end()));
-            m_pub_blob = std::vector<unsigned char>(secure_data.begin(), secure_data.end());
+            m_priv_key = std::make_unique<Botan::Ed25519_PrivateKey>(
+                Botan::Ed25519_PrivateKey::from_seed(secretKey(priv_key, 32)));
+            setPublicKey(typeName(), m_priv_key->public_key_bits(), pub_data, priv_key);
+            m_pubkey = std::make_unique<ED25519Pub>(m_pub_blob);
         }
 
         
@@ -80,17 +98,9 @@ namespace nglab
             std::vector<uint8_t> pub_data = d.readBlob();
             secure_vector<uint8_t> priv_key = d.readBlobSecure();
 
-            m_priv_key = std::make_unique<Botan::Ed448_PrivateKey>(priv_key);
-
-            Serializer s;
-            //s.writeBE32(0); // Temporary placeholder for the public key length
-            s.writeString(typeName());
-            s.writeBlob(pub_data);
-            //s.writeBE32(s.size()-4, 0);
-            const auto &secure_data = s.data();
-
-            m_pubkey = std::make_unique<ED448Pub>(std::vector<uint8_t>(secure_data.begin(), secure_data.end()));
-            m_pub_blob = std::vector<unsigned char>(secure_data.begin(), secure_data.end());
+            m_priv_key = std::make_unique<Botan::Ed448_PrivateKey>(secretKey(priv_key, 57));
+            setPublicKey(typeName(), m_priv_key->public_key_bits(), pub_data, priv_key);
+            m_pubkey = std::make_unique<ED448Pub>(m_pub_blob);
         }
 
         std::vector<uint8_t> Ed448Key::sign(const std::vector<uint8_t> &data, [[maybe_unused]] uint32_t flags) const
