@@ -18,6 +18,7 @@
 #include "integration-test.h"
 #include "agent-client.h"
 #include "integration-config.h"
+#include <botan/base64.h>
 #include <pwd.h>
 #include <unistd.h>
 #include <algorithm>
@@ -37,8 +38,12 @@ namespace nglab::libssha::test::integration
         {
             agent = {SSH_AGENT_PATH, "-D", "-a", m_env->agentSocket()};
         }
-        m_agent = std::make_unique<BackgroundProcess>(agent, Environment{{"LIBSSHA_LOG_COLORS", "0"}},
-                                                      m_env->agentLog());
+        // Both agents ask SSH_ASKPASS to confirm keys added with ssh-add -c
+        const std::string confirm = m_env->path("confirm");
+        std::ofstream(confirm) << "#!/bin/sh\ntest -e '" << m_env->path("confirm-allow") << "'\n";
+        std::filesystem::permissions(confirm, std::filesystem::perms::owner_all);
+        Environment agentEnv{{"LIBSSHA_LOG_COLORS", "0"}, {"SSH_ASKPASS", confirm}, {"SSH_ASKPASS_REQUIRE", "force"}};
+        m_agent = std::make_unique<BackgroundProcess>(agent, agentEnv, m_env->agentLog());
         ASSERT_TRUE(AgentClient::waitForAgent(m_env->agentSocket(), std::chrono::seconds(5)))
             << agent[0] << " did not start, see " << m_env->agentLog();
     }
@@ -125,6 +130,18 @@ namespace nglab::libssha::test::integration
         return AgentClient(m_env->agentSocket()).unlock(LockPassphrase);
     }
 
+    void AgentIntegration::allowConfirmations(bool allow)
+    {
+        if (allow)
+        {
+            std::ofstream(m_env->path("confirm-allow"));
+        }
+        else
+        {
+            std::filesystem::remove(m_env->path("confirm-allow"));
+        }
+    }
+
     Environment AgentIntegration::askpass(const std::string &passphrase)
     {
         // One script per passphrase, the passphrase has no characters the shell would expand
@@ -134,10 +151,10 @@ namespace nglab::libssha::test::integration
         return {{"SSH_ASKPASS", script}, {"SSH_ASKPASS_REQUIRE", "force"}};
     }
 
-    std::string AgentIntegration::generateKey(const std::string &name)
+    std::string AgentIntegration::generateKey(const std::string &name, const std::string &comment)
     {
         const std::string path = m_env->path(name);
-        auto result = sshKeygen({"-q", "-t", "ed25519", "-N", "", "-C", name, "-f", path});
+        auto result = sshKeygen({"-q", "-t", "ed25519", "-N", "", "-C", comment.empty() ? name : comment, "-f", path});
         if (result.exitCode != 0)
         {
             ADD_FAILURE() << "ssh-keygen " << name << ": " << result.output();
@@ -154,5 +171,15 @@ namespace nglab::libssha::test::integration
     {
         const passwd *pw = getpwuid(getuid());
         return pw != nullptr ? pw->pw_name : "";
+    }
+
+    std::vector<uint8_t> AgentIntegration::publicKeyBlob(const std::string &key)
+    {
+        std::ifstream pub(m_env->userKey(key) + ".pub");
+        std::string type;
+        std::string base64;
+        pub >> type >> base64;
+        auto blob = Botan::base64_decode(base64);
+        return std::vector<uint8_t>(blob.begin(), blob.end());
     }
 }

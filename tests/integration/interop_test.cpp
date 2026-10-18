@@ -79,7 +79,7 @@ namespace nglab::libssha::test::integration
         EXPECT_EQ(verify.exitCode, 0) << verify.output();
     }
 
-    INSTANTIATE_TEST_SUITE_P(KeyTypes, KeyInteropTest, ::testing::ValuesIn(KeyNames),
+    INSTANTIATE_TEST_SUITE_P(KeyTypes, KeyInteropTest, ::testing::ValuesIn(UserKeyNames),
                              [](const auto &info) { return info.param; });
 
     // Signing a destination constrained key outside of a bound user authentication
@@ -136,4 +136,13 @@ namespace nglab::libssha::test::integration
                                  std::replace(name.begin(), name.end(), '-', '_');
                                  return name;
                              });
+
+    // RFC 9987, sections 5.2 and 5.3: the comment comes back as it was added
+    TEST_F(AgentIntegration, CommentIsListedUnchanged)
+    {
+        const std::string comment = "zażółć gęślą jaźń <tester@example.com>";
+        ASSERT_EQ(sshAdd({generateKey("commented", comment)}).exitCode, 0);
+        EXPECT_THAT(sshAdd({"-l"}).out, HasSubstr(" " + comment + " (ED25519)"));
+        EXPECT_THAT(sshAdd({"-L"}).out, HasSubstr(" " + comment + "\n"));
+    }
 }

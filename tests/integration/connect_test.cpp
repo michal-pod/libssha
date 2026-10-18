@@ -41,7 +41,8 @@ namespace nglab::libssha::test::integration
     }
 
     INSTANTIATE_TEST_SUITE_P(KeyTypes, ConnectTest,
-                             ::testing::Values(std::make_tuple("rsa", "host_a"), std::make_tuple("ecdsa256", "host_b"),
+                             ::testing::Values(std::make_tuple("rsa", "host_a"), std::make_tuple("rsa3072", "host_a"),
+                                               std::make_tuple("rsa4096", "host_a"), std::make_tuple("ecdsa256", "host_b"),
                                                std::make_tuple("ecdsa384", "host_b"), std::make_tuple("ecdsa521", "host_b"),
                                                std::make_tuple("ed25519", "host_c")),
                              [](const auto &info) { return std::get<0>(info.param); });

@@ -18,6 +18,7 @@
 #include "integration-test.h"
 #include "agent-client.h"
 #include <libssha/messages/message.h>
+#include <libssha/utils/serializer.h>
 #include <mutex>
 #include <thread>
 
@@ -96,5 +97,61 @@ namespace nglab::libssha::test::integration
         auto list = sshAdd({"-L"});
         EXPECT_EQ(list.exitCode, 0);
         EXPECT_EQ(lineCount(list.out), count);
+    }
+
+    // RFC 9987, section 3: an unknown message gets FAILURE, the connection stays usable
+    TEST_F(AgentIntegration, UnknownMessageGetsFailure)
+    {
+        AgentClient client(m_env->agentSocket());
+        client.sendRaw({0, 0, 0, 1, 100});
+        EXPECT_EQ(client.readResponse()[0], SSH_AGENT_FAILURE);
+        client.sendRaw(detail::RequestIdentities);
+        EXPECT_EQ(client.readResponse()[0], SSH_AGENT_IDENTITIES_ANSWER);
+    }
+
+    // A length no agent accepts closes that connection only
+    TEST_F(AgentIntegration, OversizedMessageClosesConnection)
+    {
+        ASSERT_EQ(sshAddKey("ed25519").exitCode, 0);
+        {
+            AgentClient client(m_env->agentSocket());
+            client.sendRaw({0x7f, 0xff, 0xff, 0xff, SSH_AGENTC_REQUEST_IDENTITIES});
+            EXPECT_ANY_THROW(client.readResponse());
+        }
+        EXPECT_TRUE(m_agent->running());
+        EXPECT_EQ(lineCount(sshAdd({"-l"}).out), 1u);
+    }
+
+    TEST_F(AgentIntegration, TruncatedMessageThenDisconnect)
+    {
+        ASSERT_EQ(sshAddKey("ed25519").exitCode, 0);
+        {
+            AgentClient client(m_env->agentSocket());
+            client.sendRaw({0, 0, 0, 100, SSH_AGENTC_SIGN_REQUEST, 0, 0});
+        }
+        EXPECT_TRUE(m_agent->running());
+        EXPECT_EQ(lineCount(sshAdd({"-l"}).out), 1u);
+    }
+
+    // The answer goes to a closed socket, the agent must not die on it
+    TEST_F(AgentIntegration, ClientLeavesBeforeAnswer)
+    {
+        ASSERT_EQ(sshAddKey("rsa4096").exitCode, 0);
+        for (int i = 0; i < 5; ++i)
+        {
+            AgentClient client(m_env->agentSocket());
+            Serializer s;
+            s.writeBE32(0);
+            s.writeByte(SSH_AGENTC_SIGN_REQUEST);
+            s.writeBlob(publicKeyBlob("rsa4096"));
+            s.writeString("data to sign");
+            s.writeBE32(0);
+            s.finalize();
+            const auto &data = s.data();
+            client.sendRaw(std::vector<uint8_t>(data.begin(), data.end()));
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        EXPECT_TRUE(m_agent->running());
+        EXPECT_EQ(sshAdd({"-T", m_env->userKey("rsa4096") + ".pub"}).exitCode, 0);
     }
 }

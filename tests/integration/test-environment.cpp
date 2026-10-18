@@ -61,9 +61,12 @@ namespace nglab::libssha::test::integration
         }
         m_dir = pattern;
 
-        for (const auto &key : KeyNames)
+        for (const auto &key : UserKeyNames)
         {
             copyKey("user_test_" + key);
+        }
+        for (const auto &key : KeyNames)
+        {
             for (const auto &host : Hosts)
             {
                 copyKey(host + "_" + key);
@@ -129,6 +132,12 @@ namespace nglab::libssha::test::integration
         writeFile("sshd_" + host, conf.str());
     }
 
+    void TestEnvironment::addSshdOption(const std::string &host, const std::string &option)
+    {
+        std::ofstream out(m_dir / ("sshd_" + host), std::ios::app);
+        out << option << "\n";
+    }
+
     void TestEnvironment::writeSshConfig()
     {
         std::ostringstream conf;
@@ -146,7 +155,7 @@ namespace nglab::libssha::test::integration
              << "    BatchMode yes\n"
              << "    ForwardAgent yes\n"
              // Only keys from the agent, never the default ~/.ssh/id_* files
-             << "    IdentityFile " << path("no-identity") << "\n";
+             << "    IdentityFile none\n";
         writeFile("ssh_config", conf.str());
     }
 
@@ -167,7 +176,7 @@ namespace nglab::libssha::test::integration
     void TestEnvironment::writeAuthorizedKeys()
     {
         std::string keys;
-        for (const auto &key : KeyNames)
+        for (const auto &key : UserKeyNames)
         {
             keys += detail::readFile(m_dir / ("user_test_" + key + ".pub"));
         }

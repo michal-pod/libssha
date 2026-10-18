@@ -2,6 +2,8 @@ ssh_keys = [
   # type, size, filename, destination_folder
   # user keys
   ['rsa', '2048', 'user_test_rsa'],
+  ['rsa', '3072', 'user_test_rsa3072'],
+  ['rsa', '4096', 'user_test_rsa4096'],
   ['ecdsa', '256', 'user_test_ecdsa256'],
   ['ecdsa', '384', 'user_test_ecdsa384'],
   ['ecdsa', '521', 'user_test_ecdsa521'],
@@ -84,7 +86,10 @@ ssha_integration_test = executable('ssha_integration_test',
         'connect_test.cpp',
         'constraints_test.cpp',
         'interop_test.cpp',
-        'transport_test.cpp'
+        'transport_test.cpp',
+        'forwarded_agent_test.cpp',
+        'certificate_test.cpp',
+        'requests_test.cpp'
     ],
     dependencies: [ssha, botan, dependency('gmock_main')],
     install: false

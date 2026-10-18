@@ -16,6 +16,7 @@
  * along with libssha. If not, see <http://www.gnu.org/licenses/>.
  */
 #include "integration-test.h"
+#include <thread>
 
 namespace nglab::libssha::test::integration
 {
@@ -74,5 +75,62 @@ namespace nglab::libssha::test::integration
         ASSERT_EQ(sshAddKey("ed25519", {"host_a", "host_a>host_b"}).exitCode, 0);
         EXPECT_THAT(ssh({"host_a", "host_b", "host_a"}, "echo connected_to_host_a_via_cycle").output(),
                     HasSubstr(PermissionDenied));
+    }
+
+    // RFC 9987, section 5.2.7.2: each use of a key added with ssh-add -c is confirmed
+    TEST_F(AgentIntegration, ConfirmedUseSigns)
+    {
+        allowConfirmations(true);
+        ASSERT_EQ(sshAdd({"-c", m_env->userKey("ed25519")}).exitCode, 0);
+        EXPECT_THAT(ssh({"host_a"}, "echo connected_to_host_a").output(), HasSubstr("connected_to_host_a"));
+    }
+
+    // RFC 9987, sections 5.2.7.2 and 5.6
+    TEST_F(AgentIntegration, DeniedUseIsRefused)
+    {
+        allowConfirmations(false);
+        ASSERT_EQ(sshAdd({"-c", m_env->userKey("ed25519")}).exitCode, 0);
+        EXPECT_THAT(ssh({"host_a"}, "echo connected_to_host_a").output(), HasSubstr(PermissionDenied));
+    }
+
+    // All constraints in one request, in the order ssh-add writes them
+    TEST_F(AgentIntegration, CombinedConstraints)
+    {
+        allowConfirmations(true);
+        ASSERT_EQ(sshAdd({"-c", "-t", "60", "-h", "host_a", m_env->userKey("ed25519")}).exitCode, 0);
+        EXPECT_THAT(ssh({"host_a"}, "echo connected_to_host_a").output(), HasSubstr("connected_to_host_a"));
+        EXPECT_THAT(ssh({"host_b"}, "echo connected_to_host_b").output(), HasSubstr(PermissionDenied));
+    }
+
+    // RFC 9987, section 5.2: adding a key again replaces its constraints
+    TEST_F(AgentIntegration, ReAddingKeyReplacesDestinationConstraint)
+    {
+        ASSERT_EQ(sshAddKey("ed25519", {"host_a"}).exitCode, 0);
+        EXPECT_THAT(ssh({"host_b"}, "echo connected_to_host_b").output(), HasSubstr(PermissionDenied));
+
+        ASSERT_EQ(sshAddKey("ed25519").exitCode, 0);
+        EXPECT_EQ(lineCount(sshAdd({"-l"}).out), 1u);
+        EXPECT_THAT(ssh({"host_b"}, "echo connected_to_host_b").output(), HasSubstr("connected_to_host_b"));
+    }
+
+    TEST_F(AgentIntegration, ReAddingKeyReplacesLifetime)
+    {
+        ASSERT_EQ(sshAdd({"-t", "60", m_env->userKey("ed25519")}).exitCode, 0);
+        ASSERT_EQ(sshAdd({"-t", "1", m_env->userKey("ed25519")}).exitCode, 0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2500));
+        EXPECT_THAT(sshAdd({"-l"}).output(), HasSubstr(NoIdentities));
+    }
+
+    TEST_F(AgentIntegration, UserConstraintOnForwardedHop)
+    {
+        ASSERT_EQ(sshAddKey("ed25519", {"host_a", "host_a>" + userName() + "@host_b"}).exitCode, 0);
+        EXPECT_THAT(ssh({"host_a", "host_b"}, "echo connected_to_host_b").output(), HasSubstr("connected_to_host_b"));
+    }
+
+    TEST_F(AgentIntegration, OtherUserOnForwardedHopIsRefused)
+    {
+        ASSERT_EQ(sshAddKey("ed25519", {"host_a", "host_a>invaliduser@host_b"}).exitCode, 0);
+        EXPECT_THAT(ssh({"host_a"}, "echo connected_to_host_a").output(), HasSubstr("connected_to_host_a"));
+        EXPECT_THAT(ssh({"host_a", "host_b"}, "echo connected_to_host_b").output(), HasSubstr(PermissionDenied));
     }
 }

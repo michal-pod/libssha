@@ -29,6 +29,8 @@ namespace nglab::libssha::test::integration
 
     // Key files generated at build time, without the user_test_/host_x_ prefix
     const std::vector<std::string> KeyNames{"rsa", "ecdsa256", "ecdsa384", "ecdsa521", "ed25519"};
+    // User keys only, the larger RSA keys are not needed as host keys
+    const std::vector<std::string> UserKeyNames{"rsa", "rsa3072", "rsa4096", "ecdsa256", "ecdsa384", "ecdsa521", "ed25519"};
 
     // Temporary directory with copies of the keys and the ssh/sshd configuration
     class TestEnvironment
@@ -48,6 +50,9 @@ namespace nglab::libssha::test::integration
         std::string agentSocket() const { return path("agent.sock"); }
         std::string agentLog() const { return path("agent.log"); }
         std::string userKey(const std::string &name) const { return path("user_test_" + name); }
+
+        // Extra sshd option for one host, read by the next connection to it
+        void addSshdOption(const std::string &host, const std::string &option);
 
         // Leave the directory for inspection after a failed test
         void keep() { m_keep = true; }

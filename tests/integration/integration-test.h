@@ -54,10 +54,15 @@ namespace nglab::libssha::test::integration
         bool lockAgent();
         bool unlockAgent();
 
+        // Answer of the agent's SSH_ASKPASS to ssh-add -c confirmations, deny by default
+        void allowConfirmations(bool allow);
+
         // Environment for ssh-add -x/-X, the passphrase comes from SSH_ASKPASS
         Environment askpass(const std::string &passphrase);
         // A new ed25519 key in the test directory, returns its path
-        std::string generateKey(const std::string &name);
+        std::string generateKey(const std::string &name, const std::string &comment = "");
+        // RFC 9987, section 5.3: the key blob of a user key, as the agent lists it
+        std::vector<uint8_t> publicKeyBlob(const std::string &key);
 
         static size_t lineCount(const std::string &text);
         static std::string userName();

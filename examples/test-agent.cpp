@@ -19,7 +19,10 @@
 #include <sys/un.h>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <list>
+#include <spawn.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <libssha/messages/message.h>
 #include <libssha/messages/add-identity.h>
@@ -49,10 +52,32 @@ public:
 
     bool confirmRequest(const nglab::libssha::KeyBase& key) override
     {
-        // For testing, always confi
         const auto &mi = matchInfo();
-        log.info("Auto-confirming request for testing from host {} to host {}", mi.from, mi.to);
-        return true;
+        const char *askpass = std::getenv("SSH_ASKPASS");
+        if (askpass == nullptr || *askpass == '\0')
+        {
+            log.info("Auto-confirming request for testing from host {} to host {}", mi.from, mi.to);
+            return true;
+        }
+
+        // Same as OpenSSH ssh-agent: the askpass program confirms by exiting with 0
+        std::string program(askpass);
+        std::string prompt = "Allow use of key " + key.comment() + "?";
+        char *argv[] = {program.data(), prompt.data(), nullptr};
+        pid_t pid = -1;
+        if (posix_spawn(&pid, program.c_str(), nullptr, nullptr, argv, environ) != 0)
+        {
+            log.error("Cannot run {}", program);
+            return false;
+        }
+        int status = 0;
+        if (waitpid(pid, &status, 0) != pid)
+        {
+            return false;
+        }
+        bool confirmed = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+        log.info("Request from host {} to host {} {}", mi.from, mi.to, confirmed ? "confirmed" : "denied");
+        return confirmed;
     }
 
     bool requiresConfirmation(nglab::libssha::KeyBasePtr key) const override
