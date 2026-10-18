@@ -24,10 +24,12 @@ meson setup build
 meson compile -C build
 ```
 
-Integration tests can be run using:
+Unit and integration tests can be run using:
 ```bash
 meson test -C build
 ```
+
+Integration tests need OpenSSH (`ssh`, `ssh-add`, `sshd`, `ssh-keygen`) but no root and no open ports: every connection starts its own `sshd -i` through `ProxyCommand`, and every test gets its own temporary directory and `test-agent`. Set `LIBSSHA_KEEP_TEST_DIR=1` to keep the directories under `/tmp/libssha-it-*` for inspection.
 
 Code coverage can be generated using standard meson coverage tooling.
 
@@ -66,7 +68,7 @@ Code coverage can be generated using standard meson coverage tooling.
 ## Notes & Known Limitations
 - Smart card support is not implemented yet.
 - Coverage tooling is validated on Linux; adjust scripts for other OSes.
-- Integration tests are scripted and tested only on Linux.
+- Integration tests run only on Linux.
 
 ## Contact & License
 - See `LICENSE.md` for license terms.
