@@ -35,7 +35,7 @@ namespace nglab
          * @brief Class representing an Extension Message.
          * 
          * This class is used to handle messages that contain extensions
-         * as defined in the SSH agent protocol (draft-ietf-sshm-ssh-agent).
+         * as defined in the SSH agent protocol (RFC 9987, section 5.8).
          */
         class ExtensionMessage : public Message, public LogEnabler
         {

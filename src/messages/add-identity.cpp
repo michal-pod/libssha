@@ -89,31 +89,58 @@ namespace nglab
             m_key_blob = d.sliceSecure(start, end);
             m_confirm_required = false;
             m_lifetime = 0;
+            m_extension.reset();
             m_key_comment = d.readString();
-            log.vdebug("key_type=%s, comment=%s", m_key_type.c_str(), m_key_comment.c_str());
+            log.vdebug("key_type={}, comment={}", m_key_type, m_key_comment);
 
-            if (m_type == SSH_AGENTC_ADD_IDENTITY_CONSTRAINED)
+            if (m_type == SSH_AGENTC_ADD_IDENTITY)
             {
-                // constraints
+                // Only the constrained variant may carry anything after the comment
+                if (d.remaining() > 0)
+                {
+                    throw std::runtime_error("AddIdentityMessage: unexpected data after the comment");
+                }
+            }
+            else
+            {
+                // constraints, each of them may appear once, a repeated one could silently
+                // replace a stricter one
+                bool has_confirm = false;
+                bool has_lifetime = false;
                 while (d.remaining() > 0)
                 {
                     uint8_t constr = d.readByte();
                     switch (constr)
                     {
                     case SSH_AGENT_CONSTRAIN_CONFIRM: // confirm
+                        if (has_confirm)
+                        {
+                            throw std::runtime_error("AddIdentityMessage: repeated confirm constraint");
+                        }
+                        has_confirm = true;
                         log.debug("has confirm constraint");
                         m_confirm_required = true;
                         break;
                     case SSH_AGENT_CONSTRAIN_LIFETIME: // lifetime
                     {
+                        if (has_lifetime)
+                        {
+                            throw std::runtime_error("AddIdentityMessage: repeated lifetime constraint");
+                        }
+                        has_lifetime = true;
                         m_lifetime = d.readBE32();
-                        log.debug("has lifetime: %u", m_lifetime);
+                        log.debug("has lifetime: {}", m_lifetime);
                         break;
                     }
                     case SSH_AGENT_CONSTRAIN_EXTENSION:
                     {
                         std::string ext_type = d.readString();
-                        log.debug("has extension: type=%s", ext_type.c_str());
+                        log.debug("has extension: type={}", ext_type);
+                        // Only one extension is kept, so any repetition would drop a constraint
+                        if (m_extension)
+                        {
+                            throw std::runtime_error("AddIdentityMessage: repeated constraint extension " + ext_type);
+                        }
                         m_extension = ExtensionFactory::instance().createConstraintExtension(ext_type);
                         if (!m_extension) {
                             throw std::runtime_error("AddIdentityMessage: unknown constraint extension " + ext_type);

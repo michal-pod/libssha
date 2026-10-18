@@ -107,17 +107,17 @@ TEST_F(KeyManagerTestFixture, RemoveKeyWorks) {
     auto blob = make_ed25519_blob();
     km.addKey("ssh-ed25519", blob, "to-remove");
     auto pub_blob = make_ed25519_pub_blob();
-    km.removeKey(std::vector<uint8_t>(pub_blob.begin(), pub_blob.end()));
+    EXPECT_TRUE(km.removeKey(std::vector<uint8_t>(pub_blob.begin(), pub_blob.end())));
     auto list = km.listKeys(session);
     EXPECT_TRUE(list.empty());
 }
 
-TEST_F(KeyManagerTestFixture, RemoveKeyNotFoundDoesNothing) {
+TEST_F(KeyManagerTestFixture, RemoveKeyNotFoundReturnsFalse) {
     auto& km = nglab::libssha::KeyManager::instance();
     auto blob = make_ed25519_blob();
     km.addKey("ssh-ed25519", blob, "present");
     std::vector<uint8_t> not_present(32, 0xFF);
-    km.removeKey(not_present);
+    EXPECT_FALSE(km.removeKey(not_present));
     auto list = km.listKeys(session);
     EXPECT_EQ(list.size(), 1);
 }
@@ -141,6 +141,19 @@ TEST_F(KeyManagerTestFixture, SignDataSuccess) {
     std::vector<uint8_t> data = {'h', 'e', 'l', 'l', 'o'};
     std::vector<uint8_t> sig = km.signData(std::vector<uint8_t>(pub_blob.begin(), pub_blob.end()), data, 0);
     EXPECT_FALSE(sig.empty());
+}
+
+TEST_F(KeyManagerTestFixture, SignDataUnsupportedFlagsThrows) {
+    auto& km = nglab::libssha::KeyManager::instance();
+    auto blob = make_ed25519_blob();
+    km.addKey("ssh-ed25519", blob, "signer");
+    auto pub_blob = make_ed25519_pub_blob();
+    std::vector<uint8_t> pub(pub_blob.begin(), pub_blob.end());
+    std::vector<uint8_t> data = {'h', 'e', 'l', 'l', 'o'};
+    // RSA SHA-2 flags are valid for ssh-rsa only (RFC 9987, section 5.6.1), 1 is reserved
+    for (uint32_t flags : {1u, 2u, 4u, 6u, 0x80u}) {
+        EXPECT_THROW(km.signData(pub, data, flags), std::runtime_error) << "flags " << flags;
+    }
 }
 
 TEST_F(KeyManagerTestFixture, SignDataKeyNotFoundThrows) {

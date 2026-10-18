@@ -18,6 +18,8 @@
 #include <libssha/extensions/extension-factory.h>
 #include <libssha/extensions/openssh-session-bind.h>
 #include <libssha/extensions/openssh-restrict-destination.h>
+#include <libssha/extensions/query.h>
+#include <algorithm>
 namespace nglab
 {
     namespace libssha
@@ -64,8 +66,31 @@ namespace nglab
             }
         }
 
+        bool ExtensionFactory::isMessageExtension(const std::string &ext_name)
+        {
+            const auto &creators = instance().m_message_extension_creators;
+            return creators.find(ext_name) != creators.end();
+        }
+
+        std::vector<std::string> ExtensionFactory::extensionNames()
+        {
+            std::vector<std::string> names;
+            for (const auto &entry : instance().m_message_extension_creators)
+            {
+                names.push_back(entry.first);
+            }
+            for (const auto &entry : instance().m_constraint_extension_creators)
+            {
+                names.push_back(entry.first);
+            }
+            std::sort(names.begin(), names.end());
+            names.erase(std::unique(names.begin(), names.end()), names.end());
+            return names;
+        }
+
         void ExtensionFactory::initializeExtensions()
         {
+            QueryExtension::registerType();
             OpenSSHSessionBind::registerType();
             OpenSSHSRestrictDestination::registerType();
         }

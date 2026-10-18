@@ -69,6 +69,16 @@ namespace nglab
             }
 
             /**
+             * @brief Check if the signature type requested in a sign request is supported
+             * @param flags The flags of the sign request (RFC 9987, section 5.6.1)
+             * @return true if sign() can honour the flags; by default only 0 (no flags)
+             */
+            virtual bool isTypeSupported(uint32_t flags) const
+            {
+                return flags == 0;
+            }
+
+            /**
              * @brief Sign the given data with the private key
              * @param data The data to be signed
              * @return std::string The signature

@@ -79,10 +79,10 @@ namespace nglab
 
             /**
              * @brief Remove a key from the key manager
-             * @param type The key type (e.g., "ssh-ed25519", "ssh-rsa", etc.)
              * @param blob The key blob
+             * @return true if the key was found and removed
              */
-            void removeKey(const std::vector<uint8_t> &blob);
+            bool removeKey(const std::vector<uint8_t> &blob);
 
             /**
              * @brief Remove all keys from the key manager

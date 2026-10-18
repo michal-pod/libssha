@@ -213,6 +213,10 @@ namespace nglab
              */
             void failureResponse();
             /**
+             * @brief Send an extension failure response, for a known extension that failed.
+             */
+            void extensionFailureResponse();
+            /**
              * @brief Process a request for identities.
              * @param msg The message containing the request.
              */
@@ -264,6 +268,7 @@ namespace nglab
             void processRemoveAllIdentity();
             bool processSignRequest(const Message &msg);
             bool processExtension(const Message &msg);
+            void processQuery();
             bool processLock(const Message &msg);
             bool processUnlock(const Message &msg);
 

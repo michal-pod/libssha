@@ -91,7 +91,7 @@ namespace nglab
             emitKeyAdded(key);
         }
 
-        void KeyManager::removeKey(const std::vector<uint8_t> &blob)
+        bool KeyManager::removeKey(const std::vector<uint8_t> &blob)
         {
             KeyBasePtr key;
 
@@ -103,11 +103,12 @@ namespace nglab
                     m_keys.erase(std::find(m_keys.begin(), m_keys.end(), key));
                 }
             }
-            if (key)
+            if (!key)
             {
-                emitKeyRemoved(key);
+                return false;
             }
-            // else: key not found, do nothing
+            emitKeyRemoved(key);
+            return true;
         }
 
         void KeyManager::removeAllKeys()
@@ -176,6 +177,10 @@ namespace nglab
 
             if (key && !key->expired())
             {
+                if (!key->isTypeSupported(flags))
+                {
+                    throw std::runtime_error(std::format("Unsupported signature flags {}", flags));
+                }
                 return key->sign(data, flags);
             }
             

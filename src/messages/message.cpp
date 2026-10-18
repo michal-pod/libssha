@@ -66,7 +66,7 @@ namespace nglab
     
     std::string Message::typeName() const
     {
-      // Mapping according to draft-ietf-sshm-ssh-agent section 6.1
+      // Mapping according to RFC 9987 section 8
       switch (m_type) {
         case SSH_AGENTC_REQUEST_IDENTITIES: return "SSH_AGENTC_REQUEST_IDENTITIES";
         case SSH_AGENTC_SIGN_REQUEST: return "SSH_AGENTC_SIGN_REQUEST";

@@ -305,7 +305,7 @@ test_expected_output "Connect using ED25519 key with cycle-deny constraints" \
     "Permission denied (publickey)."
 test_successful_command "Remove ED25519 key with cycle-deny constraints" "ssh-add -d user_test_ed25519" 
 
-# Unlocking unlocked agent should fail - section 3.7 of agent protocol draft
+# Unlocking unlocked agent should fail - section 5.7 of RFC 9987
 test_failed_command "Unlocking already unlocked agent should fail" "$LOCK_UNLOCK_AGENT_PATH unlock"
 
 if [ "$MODE" = "count" ] ; then

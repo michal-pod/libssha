@@ -4,7 +4,7 @@ A compact, modular, and extensible SSH agent implementation in C++20 compatible 
 
 ## Highlights
 - Embeddable library providing SSH agent server/session logic.
-- Implements latest draft of the [OpenSSH agent protocol](https://datatracker.ietf.org/doc/draft-ietf-sshm-ssh-agent/12/).
+- Implements the [SSH Agent Protocol, RFC 9987](https://www.rfc-editor.org/rfc/rfc9987).
 - Modular key/provider architecture (RSA, ECDSA, ED25519, ED448).
 - Extension points for custom policies and messages.
 - Unit and integration tests with coverage support on Linux.

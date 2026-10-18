@@ -43,6 +43,7 @@ namespace nglab
             RsaKey(const secure_vector<uint8_t> &blob,
                        const std::string &comment = "");            
 
+            virtual bool isTypeSupported(uint32_t flags) const override;
             virtual std::vector<uint8_t> sign(const std::vector<uint8_t> &data, uint32_t flags) const override;
             static std::vector<uint8_t> extractPub(const secure_vector<uint8_t> &data);
             static void skipBlob(Deserializer &d);

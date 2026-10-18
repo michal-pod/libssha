@@ -80,6 +80,14 @@ namespace nglab
             return std::vector<uint8_t>(blob.begin(), blob.end());
         }
 
+        bool RsaKey::isTypeSupported(uint32_t flags) const
+        {
+            // SHA-1 (no flags) or exactly one of the SHA-2 flags, RFC 9987 section 5.6.1
+            return flags == 0 ||
+                   flags == SignRequestFlags::SSH_AGENT_RSA_SHA2_256 ||
+                   flags == SignRequestFlags::SSH_AGENT_RSA_SHA2_512;
+        }
+
         std::vector<uint8_t> RsaKey::sign(const std::vector<uint8_t> &data, uint32_t flags) const
         {
             Botan::AutoSeeded_RNG rng;

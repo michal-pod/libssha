@@ -26,6 +26,8 @@
 #include <libssha/utils/logger.h>
 #include <libssha/key/key-manager.h>
 #include <libssha/extensions/openssh-session-bind.h>
+#include <libssha/extensions/extension-factory.h>
+#include <libssha/extensions/query.h>
 #include <libssha/messages/userauth-request.h>
 
 #include <string>
@@ -241,11 +243,6 @@ namespace nglab
             {
                 processUnlock(msg);
             }
-            else if (msg.type() == SSH_AGENTC_REMOVE_ALL_RSA_IDENTITIES)
-            {
-                // Deprecated message type, treat as REMOVE_ALL_IDENTITIES
-                processRemoveAllIdentity();
-            }
             else
             {
                 log.error("Unsupported message type: {} ({})", msg.typeName(), msg.type());
@@ -290,7 +287,13 @@ namespace nglab
                 RemoveIdentityMessage remove_msg(msg);
 
                 auto &km = KeyManager::instance();
-                km.removeKey(remove_msg.keyBlob());
+                // RFC 9987, section 5.4: FAILURE when the key is not found
+                if (!km.removeKey(remove_msg.keyBlob()))
+                {
+                    log.warning("Key to remove not found");
+                    failureResponse();
+                    return false;
+                }
                 successResponse();
             }
             catch (const std::exception &e)
@@ -320,6 +323,13 @@ namespace nglab
                 {
                     log.error("Key not found for signing");
                     throw std::runtime_error("Key not found for signing");
+                }
+
+                // Refuse before any confirmation dialog, RFC 9987 section 5.6
+                if (!key->isTypeSupported(sign_msg.flags()))
+                {
+                    log.warning("Unsupported signature flags {} for key type {}", sign_msg.flags(), key->type());
+                    throw std::runtime_error("Unsupported signature flags");
                 }
 
                 if (key->hasDestConstraints())
@@ -403,6 +413,7 @@ namespace nglab
         bool Session::processExtension(const Message &msg)
         {
             bool session_bind = false;
+            bool known = false;
             try
             {
                 // Read the name first, ExtensionMessage parses (and verifies) the extension
@@ -410,7 +421,17 @@ namespace nglab
                 Deserializer name_reader(msg.data(), msg.length());
                 name_reader.readBE32();
                 name_reader.readByte();
-                session_bind = name_reader.readString() == "session-bind@openssh.com";
+                const auto name = name_reader.readString();
+                session_bind = name == "session-bind@openssh.com";
+
+                // RFC 9987, section 5.8: an unsupported extension gets the plain FAILURE
+                if (!ExtensionFactory::isMessageExtension(name))
+                {
+                    log.error("Unsupported extension: {}", name);
+                    failureResponse();
+                    return false;
+                }
+                known = true;
 
                 ExtensionMessage ext_msg(msg);
                 log.debug("Processing extension: {}", ext_msg.extensionName());
@@ -421,10 +442,16 @@ namespace nglab
                     return true;
                 }
 
+                if (dynamic_cast<QueryExtension *>(ext_msg.extension().get()))
+                {
+                    processQuery();
+                    return true;
+                }
+
                 if (!session_bind)
                 {
-                    log.error("Unsupported extension: {}", ext_msg.extensionName());
-                    failureResponse();
+                    log.error("Extension {} was not handled", ext_msg.extensionName());
+                    extensionFailureResponse();
                     return false;
                 }
 
@@ -448,10 +475,34 @@ namespace nglab
                     m_binding_failed = true;
                     m_session_bindings.clear();
                 }
-                failureResponse();
+                // A failure of a known extension is reported as such (RFC 9987, section 5.8)
+                if (known)
+                {
+                    extensionFailureResponse();
+                }
+                else
+                {
+                    failureResponse();
+                }
                 return false;
             }
             return true;
+        }
+
+        void Session::processQuery()
+        {
+            // RFC 9987, section 5.8.1: the extension name followed by the supported names
+            Serializer s;
+            s.writeBE32(1); // placeholder for the length, set by finalize()
+            s.writeByte(SSH_AGENT_EXTENSION_RESPONSE);
+            s.writeString(query_ext_name);
+            for (const auto &name : ExtensionFactory::extensionNames())
+            {
+                s.writeString(name);
+            }
+            s.finalize();
+            auto response = s.dataSecure();
+            respond(response);
         }
 
         bool Session::processLock(const Message &msg)
@@ -496,6 +547,13 @@ namespace nglab
         {
             SuccessMessage success_msg;
             auto response = success_msg.serialize();
+            respond(response);
+        }
+
+        void Session::extensionFailureResponse()
+        {
+            ExtensionFailureMessage fail_msg;
+            auto response = fail_msg.serialize();
             respond(response);
         }
 

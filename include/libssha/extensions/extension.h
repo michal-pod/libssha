@@ -27,7 +27,7 @@ namespace nglab
          * @brief Enum representing the type of extension
          * MessageExtension:
          * An extension that applies to messages as in the SSH agent protocol described in
-         * draft-ietf-sshm-ssh-agent section 3.8.
+         * RFC 9987 section 5.8.
          *
          * In this library I support only extension session-bind@openssh.com but this mechanism for
          * extension make easy to add new extensions in the future.
@@ -36,7 +36,7 @@ namespace nglab
          * An extension that applies to constraints
          *
          * This extension type is for key constraints extensions as described in
-         * draft-ietf-sshm-ssh-agent section 3.2.7.
+         * RFC 9987 section 5.2.7.3.
          */
         enum class ExtensionType
         {

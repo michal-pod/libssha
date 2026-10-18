@@ -21,6 +21,7 @@
 #include <string>
 #include <functional>
 #include <memory>
+#include <vector>
 namespace nglab
 {
     namespace libssha
@@ -68,6 +69,18 @@ namespace nglab
              * @return std::shared_ptr<ExtensionBase> The created extension instance, or nullptr if not found
              */
             static std::shared_ptr<ExtensionBase> createConstraintExtension(const std::string &ext_name);
+
+            /**
+             * @brief Check if a message extension with the given name is registered
+             * @param ext_name The name of the extension
+             */
+            static bool isMessageExtension(const std::string &ext_name);
+
+            /**
+             * @brief Names of all registered extensions (message and constraint ones)
+             * @return Sorted names without duplicates
+             */
+            static std::vector<std::string> extensionNames();
 
             /**
              * @brief Initialize and register all built-in extensions

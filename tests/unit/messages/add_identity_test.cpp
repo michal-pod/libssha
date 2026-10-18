@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 #include <libssha/messages/add-identity.h>
 #include <libssha/messages/message.h>
+#include <libssha/extensions/extension-factory.h>
 #include <libssha/utils/serializer.h>
 #include <libssha/utils/secure_vector.h>
 #include <vector>
@@ -148,4 +149,102 @@ TEST(AddIdentityMessage, ContructorWithConstrains)
     EXPECT_EQ(msg.keyBlob(), blob);
     EXPECT_TRUE(msg.confirmRequired());
     EXPECT_EQ(msg.lifetime(), 123u);
+}
+
+namespace
+{
+    constexpr char RestrictDestinationName[] = "restrict-destination-v00@openssh.com";
+
+    std::vector<uint8_t> hopBlob(const std::string &hostname, const std::vector<uint8_t> &key)
+    {
+        Serializer s;
+        s.writeString("");
+        s.writeString(hostname);
+        s.writeBlob({}); // extensions not supported
+        if (!key.empty())
+        {
+            s.writeBlob(key);
+            s.writeByte(0);
+        }
+        return s.data();
+    }
+
+    // Constraint payload of restrict-destination-v00@openssh.com with one destination
+    std::vector<uint8_t> restrictDestinationPayload()
+    {
+        Serializer constraint;
+        constraint.writeBlob(hopBlob("", {}));
+        constraint.writeBlob(hopBlob("host", {0x33, 0x44}));
+        constraint.writeBlob({}); // extensions not supported
+
+        Serializer list;
+        list.writeBlob(constraint.data());
+        return list.data();
+    }
+
+    void appendConfirm(Serializer &s) { s.writeByte(SSH_AGENT_CONSTRAIN_CONFIRM); }
+
+    void appendLifetime(Serializer &s, uint32_t seconds)
+    {
+        s.writeByte(SSH_AGENT_CONSTRAIN_LIFETIME);
+        s.writeBE32(seconds);
+    }
+
+    void appendRestrictDestination(Serializer &s)
+    {
+        s.writeByte(SSH_AGENT_CONSTRAIN_EXTENSION);
+        s.writeString(RestrictDestinationName);
+        s.writeBlob(restrictDestinationPayload());
+    }
+
+    // Builds a message and parses it, `constraints` fills the part after the comment
+    template <typename Fn>
+    void parseAddIdentity(uint8_t type, Fn constraints)
+    {
+        ExtensionFactory::initializeExtensions();
+        Serializer s;
+        s.writeBE32(0); // Placeholder for length
+        s.writeByte(type);
+        s.writeString("ssh-ed25519");
+        s.writeBlob({0xAA, 0xBB});
+        s.writeBlob({0xCC, 0xDD, 0xEE, 0xFF});
+        s.writeString("comment");
+        constraints(s);
+        s.finalize();
+
+        // data() returns a copy, it has to outlive the message
+        const auto bytes = s.data();
+        Message base_msg(bytes.data(), bytes.size());
+        AddIdentityMessage msg(base_msg);
+    }
+}
+
+TEST(AddIdentityMessage, DataAfterCommentInPlainAddThrows)
+{
+    EXPECT_THROW(parseAddIdentity(SSH_AGENTC_ADD_IDENTITY, [](Serializer &s) { appendConfirm(s); }), std::runtime_error);
+    EXPECT_THROW(parseAddIdentity(SSH_AGENTC_ADD_IDENTITY, [](Serializer &s) { s.writeByte(0); }), std::runtime_error);
+}
+
+TEST(AddIdentityMessage, PlainAddWithoutConstraintsParses)
+{
+    EXPECT_NO_THROW(parseAddIdentity(SSH_AGENTC_ADD_IDENTITY, [](Serializer &) {}));
+}
+
+TEST(AddIdentityMessage, RepeatedConstraintsThrow)
+{
+    EXPECT_THROW(parseAddIdentity(SSH_AGENTC_ADD_IDENTITY_CONSTRAINED, [](Serializer &s) { appendConfirm(s); appendConfirm(s); }),
+                 std::runtime_error);
+    EXPECT_THROW(parseAddIdentity(SSH_AGENTC_ADD_IDENTITY_CONSTRAINED, [](Serializer &s) { appendLifetime(s, 10); appendLifetime(s, 3600); }),
+                 std::runtime_error);
+    EXPECT_THROW(parseAddIdentity(SSH_AGENTC_ADD_IDENTITY_CONSTRAINED,
+                                  [](Serializer &s) { appendRestrictDestination(s); appendRestrictDestination(s); }),
+                 std::runtime_error);
+}
+
+TEST(AddIdentityMessage, EachConstraintOnceInAnyOrderParses)
+{
+    EXPECT_NO_THROW(parseAddIdentity(SSH_AGENTC_ADD_IDENTITY_CONSTRAINED,
+                                     [](Serializer &s) { appendConfirm(s); appendLifetime(s, 60); appendRestrictDestination(s); }));
+    EXPECT_NO_THROW(parseAddIdentity(SSH_AGENTC_ADD_IDENTITY_CONSTRAINED,
+                                     [](Serializer &s) { appendRestrictDestination(s); appendLifetime(s, 60); appendConfirm(s); }));
 }

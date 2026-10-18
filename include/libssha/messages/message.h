@@ -31,7 +31,7 @@ namespace nglab
      * @brief Enum representing SSH agent message types.
      * 
      * These message types are defined in the SSH agent protocol
-     * as per draft-ietf-sshm-ssh-agent section 6.1
+     * as per RFC 9987 section 8
      */
     enum MessageType : uint8_t
     {
@@ -54,17 +54,14 @@ namespace nglab
       SSH_AGENTC_REMOVE_SMARTCARD_KEY = 21,
       SSH_AGENTC_ADD_SMARTCARD_KEY_CONSTRAINED = 26,
       SSH_AGENT_EXTENSION_FAILURE = 28,
-      SSH_AGENT_EXTENSION_RESPONSE = 29,
-
-      // Deprecated message types
-      SSH_AGENTC_REMOVE_ALL_RSA_IDENTITIES = 9
+      SSH_AGENT_EXTENSION_RESPONSE = 29
     };
 
     /**
      * @brief Enum representing key constraints in SSH agent.
      * 
      * These constraints are used when adding keys to the agent
-     * as per draft-ietf-sshm-ssh-agent section 6.2
+     * as per RFC 9987 sections 5.2.7 and 8
      */
     enum KeyConstraint : uint8_t
     {
@@ -114,7 +111,7 @@ namespace nglab
       uint8_t type() const;
 
       /**
-       * Get the name of the message type as in draft-ietf-sshm-ssh-agent
+       * Get the name of the message type as in RFC 9987 section 8
        */
       string typeName() const;
 
