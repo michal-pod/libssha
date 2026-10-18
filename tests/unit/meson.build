@@ -6,6 +6,7 @@ ssha_test = executable('ssha_test',
     [
         'main.cpp',
         'agent/session_test.cpp',
+        'agent/destination_constraints_test.cpp',
         'key/key_test.cpp',
         'key/key_manager_test.cpp',
         'key/pub_key_test.cpp',

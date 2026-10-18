@@ -63,5 +63,5 @@ TEST(KeyBaseTest, ConfirmRequiredFlag)
     EXPECT_FALSE(key.confirmRequired());
 }
 
-// Constraints will be tested in integration tests
+// Destination constraints are tested in agent/destination_constraints_test.cpp
 } // namespace nglab::libssha::test::key
