@@ -18,6 +18,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <cstdio>
+#include <cstring>
 #include <list>
 #include <unistd.h>
 #include <libssha/messages/message.h>
@@ -109,9 +110,17 @@ int main(int argc, char **argv)
         perror("socket");
         return 1;
     }
-    sockaddr_un addr;
+    // Integration tests give each agent its own socket
+    const char *socket_path = argc > 1 ? argv[1] : "/tmp/test-socket";
+    sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
-    snprintf(addr.sun_path, sizeof(addr.sun_path), "/tmp/test-socket");
+    if (strlen(socket_path) >= sizeof(addr.sun_path))
+    {
+        fprintf(stderr, "Socket path too long: %s\n", socket_path);
+        return 1;
+    }
+    snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", socket_path);
+    unlink(socket_path);
     if (bind(soc, (sockaddr *)&addr, sizeof(addr)) < 0)
     {
         perror("bind");
@@ -214,6 +223,7 @@ int main(int argc, char **argv)
 
     /* cleanup: close sockets so atexit handlers run cleanly */
     close(soc);
+    unlink(socket_path);
     for (auto &session : sessions)
     {
         close(session.fd());
