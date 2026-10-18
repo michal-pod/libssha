@@ -17,10 +17,36 @@
  */
 #include <gtest/gtest.h>
 #include <libssha/messages/message.h>
+#include <libssha/messages/sign-request.h>
 #include <libssha/utils/serializer.h>
 #include <botan/secmem.h>
 
 using namespace nglab::libssha;
+
+// Protocol numbers from RFC 9987, sections 8.1, 8.2 and 8.3
+static_assert(SSH_AGENT_FAILURE == 5);
+static_assert(SSH_AGENT_SUCCESS == 6);
+static_assert(SSH_AGENTC_REQUEST_IDENTITIES == 11);
+static_assert(SSH_AGENT_IDENTITIES_ANSWER == 12);
+static_assert(SSH_AGENTC_SIGN_REQUEST == 13);
+static_assert(SSH_AGENT_SIGN_RESPONSE == 14);
+static_assert(SSH_AGENTC_ADD_IDENTITY == 17);
+static_assert(SSH_AGENTC_REMOVE_IDENTITY == 18);
+static_assert(SSH_AGENTC_REMOVE_ALL_IDENTITIES == 19);
+static_assert(SSH_AGENTC_ADD_SMARTCARD_KEY == 20);
+static_assert(SSH_AGENTC_REMOVE_SMARTCARD_KEY == 21);
+static_assert(SSH_AGENTC_LOCK == 22);
+static_assert(SSH_AGENTC_UNLOCK == 23);
+static_assert(SSH_AGENTC_ADD_IDENTITY_CONSTRAINED == 25);
+static_assert(SSH_AGENTC_ADD_SMARTCARD_KEY_CONSTRAINED == 26);
+static_assert(SSH_AGENTC_EXTENSION == 27);
+static_assert(SSH_AGENT_EXTENSION_FAILURE == 28);
+static_assert(SSH_AGENT_EXTENSION_RESPONSE == 29);
+static_assert(SSH_AGENT_CONSTRAIN_LIFETIME == 1);
+static_assert(SSH_AGENT_CONSTRAIN_CONFIRM == 2);
+static_assert(SSH_AGENT_CONSTRAIN_EXTENSION == 255);
+static_assert(SSH_AGENT_RSA_SHA2_256 == 2);
+static_assert(SSH_AGENT_RSA_SHA2_512 == 4);
 
 TEST(MessageTest, ConstructFromSerializedData) {
     Serializer s;

@@ -86,6 +86,7 @@ TEST_F(KeyManagerTestFixture, AddEd25519KeySuccess) {
     EXPECT_EQ(list[0].comment, comment);
 }
 
+// RFC 9987, section 5.2: a re-added key replaces the previous entry
 TEST_F(KeyManagerTestFixture, AddDuplicateEd25519KeyReplacesOld) {
     auto& km = nglab::libssha::KeyManager::instance();
     auto blob = make_ed25519_blob();
@@ -96,6 +97,7 @@ TEST_F(KeyManagerTestFixture, AddDuplicateEd25519KeyReplacesOld) {
     EXPECT_EQ(list[0].comment, "second");
 }
 
+// RFC 9987, section 5.2: an unrecognised key type gets FAILURE
 TEST_F(KeyManagerTestFixture, AddUnsupportedKeyTypeThrows) {
     auto& km = nglab::libssha::KeyManager::instance();
     nglab::libssha::secure_vector<uint8_t> blob(32, 0x02);
@@ -112,6 +114,7 @@ TEST_F(KeyManagerTestFixture, RemoveKeyWorks) {
     EXPECT_TRUE(list.empty());
 }
 
+// RFC 9987, section 5.4: FAILURE when the key is not found
 TEST_F(KeyManagerTestFixture, RemoveKeyNotFoundReturnsFalse) {
     auto& km = nglab::libssha::KeyManager::instance();
     auto blob = make_ed25519_blob();
@@ -150,12 +153,13 @@ TEST_F(KeyManagerTestFixture, SignDataUnsupportedFlagsThrows) {
     auto pub_blob = make_ed25519_pub_blob();
     std::vector<uint8_t> pub(pub_blob.begin(), pub_blob.end());
     std::vector<uint8_t> data = {'h', 'e', 'l', 'l', 'o'};
-    // RSA SHA-2 flags are valid for ssh-rsa only (RFC 9987, section 5.6.1), 1 is reserved
+    // RSA SHA-2 flags are valid for ssh-rsa only (RFC 9987, section 5.6.1), 1 is reserved (section 8.3)
     for (uint32_t flags : {1u, 2u, 4u, 6u, 0x80u}) {
         EXPECT_THROW(km.signData(pub, data, flags), std::runtime_error) << "flags " << flags;
     }
 }
 
+// RFC 9987, section 5.6: FAILURE when there is no such key
 TEST_F(KeyManagerTestFixture, SignDataKeyNotFoundThrows) {
     auto& km = nglab::libssha::KeyManager::instance();
     auto blob = make_ed25519_blob();
@@ -180,6 +184,7 @@ TEST_F(KeyManagerTestFixture, ListKeysReturnsAll) {
     EXPECT_EQ(list[1].comment, "two");
 }
 
+// RFC 9987, section 5.2.7.1: the key is deleted after its lifetime
 TEST_F(KeyManagerTestFixture, CleanupExpiredKeysWorks) {
     auto& km = nglab::libssha::KeyManager::instance();
     auto blob1 = make_ed25519_blob();
@@ -217,6 +222,7 @@ TEST_F(KeyManagerTestFixture, KeysSkipsExpiredKeys) {
     EXPECT_EQ(keys[0], long_lived);
 }
 
+// RFC 9987, section 5.2.7.1: the key is deleted after its lifetime
 TEST_F(KeyManagerTestFixture, ExpiredKeyIsUnusableBeforeCleanup) {
     auto& km = nglab::libssha::KeyManager::instance();
     auto key = km.addKey("ssh-ed25519", make_ed25519_blob(), "short-lived");
@@ -255,6 +261,7 @@ TEST_F(KeyManagerTestFixture, AddKeyFromAddIdentityMessage) {
     EXPECT_EQ(list_msg[0].comment, "from-message");
 }
 
+// RFC 9987, section 5.7
 TEST_F(KeyManagerTestFixture, LockUnlockCallsKeyMethods) {
     auto& km = nglab::libssha::KeyManager::instance();
     auto blob = make_ed25519_blob();

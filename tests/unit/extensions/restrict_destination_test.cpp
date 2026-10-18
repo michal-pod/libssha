@@ -24,6 +24,8 @@
 
 using namespace nglab::libssha;
 
+// restrict-destination-v00@openssh.com comes from OpenSSH PROTOCOL.agent, it is not part of RFC 9987
+
 std::vector<uint8_t> makeHopDescriptorBlob(const std::string& user, const std::string& hostname, const std::vector<std::vector<uint8_t>>& keys, bool ca = false) {
     Serializer s;
     s.writeString(user);

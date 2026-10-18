@@ -24,6 +24,8 @@
 
 using namespace nglab::libssha;
 
+// Message format: RFC 9987, section 5.7
+
 TEST(LockMessageBaseTest, DefaultConstructorSetsType)
 {
     LockMessage msg;

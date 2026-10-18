@@ -26,6 +26,8 @@
 
 using namespace nglab::libssha;
 
+// Message format: RFC 9987, section 5.2
+
 TEST(AddIdentityMessage, DefaultConstructor)
 {
     AddIdentityMessage msg;
@@ -118,6 +120,7 @@ TEST(AddIdentityMessage, ConstructorFromInvalidTypeThrows)
     EXPECT_THROW(AddIdentityMessage msg(wrong_type_msg), std::runtime_error);
 }
 
+// RFC 9987, section 5.2: an unrecognised key type gets FAILURE
 TEST(AddIdentityMessage, UnsupportedKeyTypeThrows)
 {
     Serializer s;
@@ -219,6 +222,7 @@ namespace
     }
 }
 
+// RFC 9987, section 5.2: SSH_AGENTC_ADD_IDENTITY ends with the comment, constraints need ADD_ID_CONSTRAINED
 TEST(AddIdentityMessage, DataAfterCommentInPlainAddThrows)
 {
     EXPECT_THROW(parseAddIdentity(SSH_AGENTC_ADD_IDENTITY, [](Serializer &s) { appendConfirm(s); }), std::runtime_error);
@@ -230,6 +234,7 @@ TEST(AddIdentityMessage, PlainAddWithoutConstraintsParses)
     EXPECT_NO_THROW(parseAddIdentity(SSH_AGENTC_ADD_IDENTITY, [](Serializer &) {}));
 }
 
+// Stricter than RFC 9987, section 5.2.7: a repeated constraint is refused instead of overriding the previous one
 TEST(AddIdentityMessage, RepeatedConstraintsThrow)
 {
     EXPECT_THROW(parseAddIdentity(SSH_AGENTC_ADD_IDENTITY_CONSTRAINED, [](Serializer &s) { appendConfirm(s); appendConfirm(s); }),

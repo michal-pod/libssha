@@ -26,6 +26,8 @@
 
 using namespace nglab::libssha;
 
+// session-bind@openssh.com comes from OpenSSH PROTOCOL.agent, it is not part of RFC 9987
+
 namespace {
 
 class DummyPubKey : public PubKeyBase {

@@ -116,7 +116,7 @@ namespace nglab::libssha::test
     const Bytes SuccessReply{0, 0, 0, 1, SSH_AGENT_SUCCESS};
     const Bytes ExtensionFailureReply{0, 0, 0, 1, SSH_AGENT_EXTENSION_FAILURE};
     const Bytes EmptyIdentitiesReply{0, 0, 0, 5, SSH_AGENT_IDENTITIES_ANSWER, 0, 0, 0, 0};
-    const Bytes UnknownRequest = frame({0xF0});
+    const Bytes UnknownRequest = frame({0xF0}); // 240-255 are private use (RFC 9987, section 8.1.1)
 
     constexpr char unhandled_ext_name[] = "unhandled@example.com";
 
@@ -155,6 +155,7 @@ namespace nglab::libssha::test
         }
     };
 
+    // RFC 9987, section 5: a message is a uint32 length followed by the type and contents
     TEST_F(SessionTestFixture, FragmentedMessageIsAnsweredOnce)
     {
         RecordingSession session(false);
@@ -166,6 +167,7 @@ namespace nglab::libssha::test
         EXPECT_EQ(session.responses(), std::vector<Bytes>{FailureReply});
     }
 
+    // RFC 9987, section 3: replies are sent in order
     TEST_F(SessionTestFixture, ConcatenatedMessagesAreAnsweredInOrder)
     {
         RecordingSession session(false);
@@ -175,6 +177,7 @@ namespace nglab::libssha::test
         EXPECT_EQ(session.responses(), (std::vector<Bytes>{EmptyIdentitiesReply, FailureReply}));
     }
 
+    // RFC 9987, section 3: replies are sent in order, also when the worker thread answers
     TEST_F(SessionTestFixture, AsyncRepliesKeepRequestOrder)
     {
         RecordingSession session(true);
@@ -186,6 +189,7 @@ namespace nglab::libssha::test
                   (std::vector<Bytes>{EmptyIdentitiesReply, FailureReply, SuccessReply, EmptyIdentitiesReply}));
     }
 
+    // RFC 9987 sets no size limit, the connection is closed above Session::MaxMessageLength
     TEST_F(SessionTestFixture, OversizedMessageIsRejected)
     {
         RecordingSession session(false);
@@ -197,6 +201,7 @@ namespace nglab::libssha::test
         EXPECT_TRUE(session.responses().empty());
     }
 
+    // RFC 9987, section 5: the length covers at least the type byte
     TEST_F(SessionTestFixture, EmptyMessageIsRejected)
     {
         RecordingSession session(false);
@@ -213,6 +218,7 @@ namespace nglab::libssha::test
         EXPECT_FALSE(session.hasPendingOperations());
     }
 
+    // RFC 9987, section 5.7: a locked agent suspends sensitive operations, the empty list follows OpenSSH
     TEST_F(SessionTestFixture, LockedAgentListsNoKeysAndRefusesOtherRequests)
     {
         RecordingSession session(false);
@@ -223,6 +229,7 @@ namespace nglab::libssha::test
         EXPECT_EQ(session.responses(), (std::vector<Bytes>{EmptyIdentitiesReply, FailureReply}));
     }
 
+    // RFC 9987, section 5.8: an unsupported extension gets an empty FAILURE
     TEST_F(SessionTestFixture, UnsupportedExtensionDoesNotFailBinding)
     {
         RecordingSession session(false);
@@ -235,11 +242,23 @@ namespace nglab::libssha::test
     TEST_F(SessionTestFixture, ReservedSshv1TypeIsRefused)
     {
         RecordingSession session(false);
-        // 9 was REMOVE_ALL_RSA_IDENTITIES in SSHv1, RFC 9987 section 8 reserves it
+        // 9 was REMOVE_ALL_RSA_IDENTITIES in SSHv1, RFC 9987 section 8.1.1 reserves it
         ASSERT_TRUE(session.process(frame({9})));
         EXPECT_EQ(session.responses(), std::vector<Bytes>{FailureReply});
     }
 
+    TEST_F(SessionTestFixture, SmartcardRequestsAreRefused)
+    {
+        RecordingSession session(false);
+        // RFC 9987, sections 5.2.6 and 5.4: an agent without token support MUST reply FAILURE
+        for (uint8_t type : {SSH_AGENTC_ADD_SMARTCARD_KEY, SSH_AGENTC_REMOVE_SMARTCARD_KEY, SSH_AGENTC_ADD_SMARTCARD_KEY_CONSTRAINED})
+        {
+            ASSERT_TRUE(session.process(frame({type})));
+        }
+        EXPECT_EQ(session.responses(), (std::vector<Bytes>{FailureReply, FailureReply, FailureReply}));
+    }
+
+    // RFC 9987, section 5.8: a failure of a supported extension SHOULD use SSH_AGENT_EXTENSION_FAILURE
     TEST_F(SessionTestFixture, UnhandledKnownExtensionGetsExtensionFailure)
     {
         RecordingSession session(false);
@@ -249,6 +268,7 @@ namespace nglab::libssha::test
         EXPECT_FALSE(session.bindingFailed());
     }
 
+    // RFC 9987, section 5.8.1: query answers with the names of supported extensions
     TEST_F(SessionTestFixture, QueryListsRegisteredExtensions)
     {
         RecordingSession session(false);
@@ -275,6 +295,7 @@ namespace nglab::libssha::test
         }
     }
 
+    // RFC 9987, section 5.8.1: the query request has no data after the name
     TEST_F(SessionTestFixture, QueryWithDataIsRefused)
     {
         RecordingSession session(false);
@@ -286,6 +307,7 @@ namespace nglab::libssha::test
         EXPECT_EQ(session.responses(), std::vector<Bytes>{ExtensionFailureReply});
     }
 
+    // session-bind@openssh.com comes from OpenSSH PROTOCOL.agent, the reply from RFC 9987, section 5.8
     TEST_F(SessionTestFixture, MalformedSessionBindFailsBinding)
     {
         RecordingSession session(false);

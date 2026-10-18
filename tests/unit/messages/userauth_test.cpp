@@ -23,6 +23,8 @@
 
 using namespace nglab::libssha;
 
+// publickey-hostbound-v00@openssh.com comes from OpenSSH PROTOCOL, it is not part of RFC 9987
+
 namespace {
 
 std::vector<uint8_t> makeValidUserAuthRequest(

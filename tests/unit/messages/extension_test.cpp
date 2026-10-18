@@ -27,6 +27,8 @@
 
 using namespace nglab::libssha;
 
+// Message format: RFC 9987, section 5.8
+
 // Dummy extension for testing
 class DummyExtension : public ExtensionBase {
 public:

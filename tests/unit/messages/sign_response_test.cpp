@@ -25,6 +25,8 @@
 
 using namespace nglab::libssha;
 
+// Message format: RFC 9987, section 5.6
+
 TEST(SignResponseMessage, DefaultConstructor) {
     SignResponseMessage msg;
     EXPECT_EQ(msg.type(), SSH_AGENT_SIGN_RESPONSE);

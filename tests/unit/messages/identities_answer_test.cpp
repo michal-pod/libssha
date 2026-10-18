@@ -26,6 +26,8 @@
 
 using namespace nglab::libssha;
 
+// Message format: RFC 9987, section 5.5
+
 TEST(IdentitiesAnswerMessage, DefaultConstructor) {
     IdentitiesAnswerMessage msg;
     EXPECT_EQ(msg.type(), SSH_AGENT_IDENTITIES_ANSWER);
