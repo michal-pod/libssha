@@ -21,7 +21,8 @@ ssha_test = executable('ssha_test',
         'messages/userauth_test.cpp',
         'messages/remove_identity_test.cpp',
         'messages/extension_test.cpp',
-        'messages/lock_message_test.cpp'
+        'messages/lock_message_test.cpp',
+        'providers/botan_keys_test.cpp'
     ],
     
     dependencies: [ssha, gtest_dep, botan],
