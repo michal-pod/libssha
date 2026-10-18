@@ -33,7 +33,7 @@ namespace nglab
             {
                 throw std::runtime_error("ED25519Pub: invalid key type: " + m_type);
             }
-            auto pubkey_blob = d.readMPInt();
+            auto pubkey_blob = d.readBlob();
 
             m_pub_key = std::make_unique<Botan::Ed25519_PublicKey>(pubkey_blob);
         }
@@ -67,7 +67,7 @@ namespace nglab
             {
                 throw std::runtime_error("ED448Pub: invalid key type: " + m_type);
             }
-            auto pubkey_blob = d.readMPInt();
+            auto pubkey_blob = d.readBlob();
 
             m_pub_key = std::make_unique<Botan::Ed448_PublicKey>(pubkey_blob);
         }
