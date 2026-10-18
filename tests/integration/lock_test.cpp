@@ -28,7 +28,7 @@ namespace nglab::libssha::test::integration
         }
         ASSERT_TRUE(lockAgent());
 
-        EXPECT_THAT(sshAdd({"-l"}).output(), ::testing::HasSubstr("The agent has no identities."));
+        EXPECT_THAT(sshAdd({"-l"}).output(), ::testing::HasSubstr(NoIdentities));
 
         ASSERT_TRUE(unlockAgent());
         auto list = sshAdd({"-l"});
@@ -41,5 +41,22 @@ namespace nglab::libssha::test::integration
     TEST_F(AgentIntegration, UnlockingUnlockedAgentFails)
     {
         EXPECT_FALSE(unlockAgent());
+    }
+
+    // RFC 9987, section 5.7, with the lock and unlock requests made by ssh-add -x/-X
+    TEST_F(AgentIntegration, SshAddLocksAndUnlocks)
+    {
+        ASSERT_EQ(sshAddKey("ed25519").exitCode, 0);
+        auto lock = sshAdd({"-x"}, askpass(LockPassphrase));
+        ASSERT_EQ(lock.exitCode, 0) << lock.output();
+        EXPECT_THAT(sshAdd({"-l"}).output(), ::testing::HasSubstr(NoIdentities));
+
+        auto wrong = sshAdd({"-X"}, askpass("wrongpassword"));
+        EXPECT_NE(wrong.exitCode, 0) << wrong.output();
+        EXPECT_THAT(sshAdd({"-l"}).output(), ::testing::HasSubstr(NoIdentities));
+
+        auto unlock = sshAdd({"-X"}, askpass(LockPassphrase));
+        EXPECT_EQ(unlock.exitCode, 0) << unlock.output();
+        EXPECT_EQ(lineCount(sshAdd({"-l"}).out), 1u);
     }
 }

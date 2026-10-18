@@ -112,11 +112,20 @@ namespace nglab::libssha::test::integration
 
     uint8_t AgentClient::request(const secure_vector<uint8_t> &message)
     {
-        if (write(m_fd, message.data(), message.size()) != static_cast<ssize_t>(message.size()))
+        sendRaw(std::vector<uint8_t>(message.begin(), message.end()));
+        return readResponse()[0];
+    }
+
+    void AgentClient::sendRaw(const std::vector<uint8_t> &data)
+    {
+        if (write(m_fd, data.data(), data.size()) != static_cast<ssize_t>(data.size()))
         {
             throw std::runtime_error("Cannot send the request to the agent");
         }
+    }
 
+    std::vector<uint8_t> AgentClient::readResponse()
+    {
         // RFC 9987, section 3: uint32 length followed by the message
         uint8_t header[4];
         detail::readExactly(m_fd, header, sizeof(header));
@@ -128,6 +137,6 @@ namespace nglab::libssha::test::integration
         }
         std::vector<uint8_t> body(length);
         detail::readExactly(m_fd, body.data(), body.size());
-        return body[0];
+        return body;
     }
 }

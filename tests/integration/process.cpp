@@ -92,7 +92,7 @@ namespace nglab::libssha::test::integration
     }
 
     ProcessResult runProcess(const std::vector<std::string> &args, const Environment &env,
-                             std::chrono::milliseconds timeout)
+                             const std::string &stdinFile, std::chrono::milliseconds timeout)
     {
         int outPipe[2];
         int errPipe[2];
@@ -103,7 +103,7 @@ namespace nglab::libssha::test::integration
 
         posix_spawn_file_actions_t actions;
         posix_spawn_file_actions_init(&actions);
-        posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
+        posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, stdinFile.c_str(), O_RDONLY, 0);
         posix_spawn_file_actions_adddup2(&actions, outPipe[1], STDOUT_FILENO);
         posix_spawn_file_actions_adddup2(&actions, errPipe[1], STDERR_FILENO);
         pid_t pid = -1;

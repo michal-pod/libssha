@@ -61,11 +61,14 @@ endforeach
 # Paths for the tests, the sshd, ssh and agent configuration is written by each test
 ssh = find_program('ssh')
 ssh_add = find_program('ssh-add')
+ssh_agent = find_program('ssh-agent')
 
 integration_config = configuration_data()
 integration_config.set_quoted('SSHD_PATH', sshd.full_path())
 integration_config.set_quoted('SSH_PATH', ssh.full_path())
 integration_config.set_quoted('SSH_ADD_PATH', ssh_add.full_path())
+integration_config.set_quoted('SSH_AGENT_PATH', ssh_agent.full_path())
+integration_config.set_quoted('SSH_KEYGEN_PATH', ssh_keygen.full_path())
 integration_config.set_quoted('TEST_AGENT_PATH', test_agent.full_path())
 integration_config.set_quoted('KEYS_DIR', meson.current_build_dir())
 configure_file(output: 'integration-config.h', configuration: integration_config)
@@ -79,7 +82,9 @@ ssha_integration_test = executable('ssha_integration_test',
         'agent_test.cpp',
         'lock_test.cpp',
         'connect_test.cpp',
-        'constraints_test.cpp'
+        'constraints_test.cpp',
+        'interop_test.cpp',
+        'transport_test.cpp'
     ],
     dependencies: [ssha, botan, dependency('gmock_main')],
     install: false
@@ -87,5 +92,13 @@ ssha_integration_test = executable('ssha_integration_test',
 
 test('integration tests', ssha_integration_test,
      depends: [test_agent] + ssh_key_targets,
+     protocol: 'gtest',
+     timeout: 300)
+
+# The same tests against OpenSSH ssh-agent, so the expectations follow the reference
+# implementation rather than libssha itself
+test('integration tests (OpenSSH agent)', ssha_integration_test,
+     depends: ssh_key_targets,
+     env: {'LIBSSHA_TEST_AGENT': 'openssh'},
      protocol: 'gtest',
      timeout: 300)

@@ -21,11 +21,12 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace nglab::libssha::test::integration
 {
-    // Talks to the agent directly where ssh-add does not fit, e.g. ssh-add -x
-    // reads the passphrase from a terminal only
+    // Talks to the agent directly, for requests that ssh-add cannot shape and for
+    // locking in tests that are about the agent rather than about ssh-add
     class AgentClient
     {
     public:
@@ -38,6 +39,11 @@ namespace nglab::libssha::test::integration
         // True when the agent answered SSH_AGENT_SUCCESS
         bool lock(const std::string &passphrase);
         bool unlock(const std::string &passphrase);
+
+        // Raw access for framing tests, sendRaw writes exactly the given bytes
+        void sendRaw(const std::vector<uint8_t> &data);
+        // One response without its length, the first byte is the message type
+        std::vector<uint8_t> readResponse();
 
         // Waits until the agent accepts connections
         static bool waitForAgent(const std::string &socketPath, std::chrono::milliseconds timeout);

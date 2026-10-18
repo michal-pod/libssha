@@ -16,12 +16,24 @@
  * along with libssha. If not, see <http://www.gnu.org/licenses/>.
  */
 #include "integration-test.h"
+#include <thread>
 
 namespace nglab::libssha::test::integration
 {
     TEST_F(AgentIntegration, NewAgentHasNoIdentities)
     {
         auto result = sshAdd({"-l"});
-        EXPECT_THAT(result.output(), ::testing::HasSubstr("The agent has no identities."));
+        EXPECT_THAT(result.output(), ::testing::HasSubstr(NoIdentities));
+    }
+
+    // The lifetime constraint removes the key after the given number of seconds
+    TEST_F(AgentIntegration, KeyExpiresAfterLifetime)
+    {
+        ASSERT_EQ(sshAdd({"-t", "1", m_env->userKey("ed25519")}).exitCode, 0);
+        EXPECT_EQ(lineCount(sshAdd({"-l"}).out), 1u);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(2500));
+        EXPECT_THAT(sshAdd({"-l"}).output(), ::testing::HasSubstr(NoIdentities));
+        EXPECT_THAT(ssh({"host_a"}, "echo connected_to_host_a").output(), ::testing::HasSubstr(PermissionDenied));
     }
 }

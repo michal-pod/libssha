@@ -21,24 +21,32 @@
 #include <pwd.h>
 #include <unistd.h>
 #include <algorithm>
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 
 namespace nglab::libssha::test::integration
 {
-    namespace detail
-    {
-        const std::string LockPassphrase = "testpassword";
-    }
-
     void AgentIntegration::SetUp()
     {
         m_env = std::make_unique<TestEnvironment>();
-        m_agent = std::make_unique<BackgroundProcess>(std::vector<std::string>{TEST_AGENT_PATH, m_env->agentSocket()},
-                                                      Environment{{"LIBSSHA_LOG_COLORS", "0"}}, m_env->agentLog());
+        std::vector<std::string> agent{TEST_AGENT_PATH, m_env->agentSocket()};
+        if (referenceAgent())
+        {
+            agent = {SSH_AGENT_PATH, "-D", "-a", m_env->agentSocket()};
+        }
+        m_agent = std::make_unique<BackgroundProcess>(agent, Environment{{"LIBSSHA_LOG_COLORS", "0"}},
+                                                      m_env->agentLog());
         ASSERT_TRUE(AgentClient::waitForAgent(m_env->agentSocket(), std::chrono::seconds(5)))
-            << "test-agent did not start, see " << m_env->agentLog();
+            << agent[0] << " did not start, see " << m_env->agentLog();
+    }
+
+    bool AgentIntegration::referenceAgent()
+    {
+        const char *agent = std::getenv("LIBSSHA_TEST_AGENT");
+        return agent != nullptr && std::string(agent) == "openssh";
     }
 
     void AgentIntegration::TearDown()
@@ -52,7 +60,7 @@ namespace nglab::libssha::test::integration
         m_env.reset();
     }
 
-    ProcessResult AgentIntegration::sshAdd(std::vector<std::string> args)
+    ProcessResult AgentIntegration::sshAdd(std::vector<std::string> args, const Environment &env)
     {
         // ssh-add looks up the host keys of -h in ~/.ssh/known_hosts by default
         if (std::find(args.begin(), args.end(), "-h") != args.end())
@@ -60,7 +68,9 @@ namespace nglab::libssha::test::integration
             args.insert(args.begin(), {"-H", m_env->knownHosts()});
         }
         args.insert(args.begin(), SSH_ADD_PATH);
-        return runProcess(args, {{"SSH_AUTH_SOCK", m_env->agentSocket()}});
+        Environment merged = env;
+        merged["SSH_AUTH_SOCK"] = m_env->agentSocket();
+        return runProcess(args, merged);
     }
 
     ProcessResult AgentIntegration::sshAddKey(const std::string &key, const std::vector<std::string> &constraints)
@@ -75,14 +85,27 @@ namespace nglab::libssha::test::integration
         return sshAdd(args);
     }
 
-    ProcessResult AgentIntegration::ssh(const std::vector<std::string> &hops, const std::string &command)
+    ProcessResult AgentIntegration::sshKeygen(const std::vector<std::string> &args, const std::string &stdinFile)
+    {
+        std::vector<std::string> full{SSH_KEYGEN_PATH};
+        full.insert(full.end(), args.begin(), args.end());
+        return runProcess(full, {{"SSH_AUTH_SOCK", m_env->agentSocket()}}, stdinFile);
+    }
+
+    ProcessResult AgentIntegration::ssh(const std::vector<std::string> &hops, const std::string &command,
+                                        const std::vector<std::string> &options)
     {
         // The remote shell splits the words again, so the nested ssh needs no quoting
         // as long as the paths and the command have no spaces to protect
         std::vector<std::string> args;
         for (const auto &host : hops)
         {
-            args.insert(args.end(), {SSH_PATH, "-F", m_env->sshConfig(), host});
+            args.insert(args.end(), {SSH_PATH, "-F", m_env->sshConfig()});
+            if (args.size() == 3)
+            {
+                args.insert(args.end(), options.begin(), options.end());
+            }
+            args.push_back(host);
         }
         std::istringstream words(command);
         for (std::string word; words >> word;)
@@ -94,12 +117,32 @@ namespace nglab::libssha::test::integration
 
     bool AgentIntegration::lockAgent()
     {
-        return AgentClient(m_env->agentSocket()).lock(detail::LockPassphrase);
+        return AgentClient(m_env->agentSocket()).lock(LockPassphrase);
     }
 
     bool AgentIntegration::unlockAgent()
     {
-        return AgentClient(m_env->agentSocket()).unlock(detail::LockPassphrase);
+        return AgentClient(m_env->agentSocket()).unlock(LockPassphrase);
+    }
+
+    Environment AgentIntegration::askpass(const std::string &passphrase)
+    {
+        // One script per passphrase, the passphrase has no characters the shell would expand
+        const std::string script = m_env->path("askpass-" + passphrase);
+        std::ofstream(script) << "#!/bin/sh\necho '" << passphrase << "'\n";
+        std::filesystem::permissions(script, std::filesystem::perms::owner_all);
+        return {{"SSH_ASKPASS", script}, {"SSH_ASKPASS_REQUIRE", "force"}};
+    }
+
+    std::string AgentIntegration::generateKey(const std::string &name)
+    {
+        const std::string path = m_env->path(name);
+        auto result = sshKeygen({"-q", "-t", "ed25519", "-N", "", "-C", name, "-f", path});
+        if (result.exitCode != 0)
+        {
+            ADD_FAILURE() << "ssh-keygen " << name << ": " << result.output();
+        }
+        return path;
     }
 
     size_t AgentIntegration::lineCount(const std::string &text)

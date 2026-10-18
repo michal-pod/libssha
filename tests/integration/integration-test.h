@@ -28,24 +28,36 @@
 namespace nglab::libssha::test::integration
 {
     const std::string PermissionDenied = "Permission denied (publickey).";
+    const std::string NoIdentities = "The agent has no identities.";
+    const std::string LockPassphrase = "testpassword";
 
-    // Each test gets its own directory and its own test-agent, nothing it does
-    // to the agent can leak into the next test
+    // Each test gets its own directory and its own agent, nothing it does to the
+    // agent can leak into the next test. With LIBSSHA_TEST_AGENT=openssh the agent
+    // is OpenSSH ssh-agent, to check the expectations against the reference.
     class AgentIntegration : public ::testing::Test
     {
     protected:
         void SetUp() override;
         void TearDown() override;
 
-        ProcessResult sshAdd(std::vector<std::string> args);
+        static bool referenceAgent();
+
+        ProcessResult sshAdd(std::vector<std::string> args, const Environment &env = {});
         ProcessResult sshAddKey(const std::string &key, const std::vector<std::string> &constraints = {});
+        ProcessResult sshKeygen(const std::vector<std::string> &args, const std::string &stdinFile = "/dev/null");
 
         // Runs the command on the last host, connecting through the earlier ones
-        // with the agent forwarded at each hop
-        ProcessResult ssh(const std::vector<std::string> &hops, const std::string &command);
+        // with the agent forwarded at each hop, options apply to the first hop
+        ProcessResult ssh(const std::vector<std::string> &hops, const std::string &command,
+                          const std::vector<std::string> &options = {});
 
         bool lockAgent();
         bool unlockAgent();
+
+        // Environment for ssh-add -x/-X, the passphrase comes from SSH_ASKPASS
+        Environment askpass(const std::string &passphrase);
+        // A new ed25519 key in the test directory, returns its path
+        std::string generateKey(const std::string &name);
 
         static size_t lineCount(const std::string &text);
         static std::string userName();

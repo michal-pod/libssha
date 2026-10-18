@@ -39,6 +39,7 @@ namespace nglab::libssha::test::integration
 
     // Runs a program to completion with its output captured
     ProcessResult runProcess(const std::vector<std::string> &args, const Environment &env,
+                             const std::string &stdinFile = "/dev/null",
                              std::chrono::milliseconds timeout = std::chrono::seconds(30));
 
     // A process running in the background, terminated when the object goes away

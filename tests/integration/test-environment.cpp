@@ -120,6 +120,8 @@ namespace nglab::libssha::test::integration
              << "KbdInteractiveAuthentication no\n"
              << "UsePAM no\n"
              << "HostKeyAlgorithms +ssh-rsa\n"
+             // SHA-1 RSA signatures are off by default, a test checks the agent still makes them
+             << "PubkeyAcceptedAlgorithms +ssh-rsa\n"
              // The temporary directory does not pass the ownership checks of sshd
              << "StrictModes no\n"
              << "PermitUserRC no\n"
