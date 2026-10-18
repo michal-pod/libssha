@@ -107,7 +107,6 @@ namespace nglab
             const auto &secure_data = s.data();
 
             m_pubkey = std::make_unique<ECDSAPub>(std::vector<uint8_t>(secure_data.begin(), secure_data.end()));
-            m_pub_blob = std::vector<unsigned char>(secure_data.begin(), secure_data.end());
         }
 
         void ECDSAKey::skipBlob(Deserializer &d)
@@ -147,23 +146,6 @@ namespace nglab
             se.writeBlob(pub_data);
             const auto &blob = se.data();
             return std::vector<uint8_t>(blob.begin(), blob.end());
-        }
-
-        string ECDSAKey::fingerprint() const
-        {
-            // Compute SHA256 hash of the public key blob
-            const auto sha256 = Botan::HashFunction::create_or_throw("EMSA1(SHA-256)");
-            sha256->update(m_pub_blob);
-            auto digest = sha256->final();
-
-            // Encode the hash in base64
-            std::string b64 = Botan::base64_encode(digest);
-            
-            while (!b64.empty() && b64.back() == '=') {
-                b64.pop_back();
-            }
-
-            return "SHA256:" + b64;
         }
 
         std::vector<uint8_t> ECDSAKey::sign(const std::vector<uint8_t> &data, [[maybe_unused]] uint32_t flags) const

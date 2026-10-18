@@ -40,9 +40,7 @@ namespace nglab
             ECDSAKey(const secure_vector<uint8_t> &blob, const std::string &comment, const std::string &type_name = "");
             static void skipBlob(Deserializer &d);
             static std::vector<uint8_t> extractPub(const secure_vector<uint8_t> &data);
-            virtual std::string fingerprint() const;
             virtual std::vector<uint8_t> sign(const std::vector<uint8_t> &data, uint32_t flags) const;
-            virtual std::vector<uint8_t> pubBlob() const  { return m_pub_blob; }
 
             void lock(secure_vector<uint8_t>& password) override;
             bool unlock(secure_vector<uint8_t>& password) override;
@@ -55,7 +53,6 @@ namespace nglab
             string m_curve_name;
             string m_botan_curve_name;
             string m_signature_algorithm;
-            vector<uint8_t> m_pub_blob;
             std::unique_ptr<Botan::ECDSA_PrivateKey> m_priv_key;
 
             static constexpr const char* edcsa_sha2_nistp256_type_name = "ecdsa-sha2-nistp256";

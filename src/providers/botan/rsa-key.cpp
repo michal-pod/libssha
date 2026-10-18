@@ -71,7 +71,6 @@ namespace nglab
             s.writeMPInt(n);
             const auto &secure_data = s.data();
             m_pubkey = std::make_unique<RSAPub>(std::vector<uint8_t>(secure_data.begin(), secure_data.end()));
-            m_pub_blob = std::vector<unsigned char>(secure_data.begin(), secure_data.end());
         }
 
         std::vector<uint8_t> RsaKey::extractPub(const secure_vector<uint8_t> &data)

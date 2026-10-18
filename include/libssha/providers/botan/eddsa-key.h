@@ -45,7 +45,6 @@ namespace nglab
         public:
             static void skipBlob(Deserializer &d);
             static std::vector<uint8_t> extractPub(const secure_vector<uint8_t> &data, string type_name);
-            virtual std::string fingerprint() const;
 
         protected:
             /**

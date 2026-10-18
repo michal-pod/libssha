@@ -52,7 +52,6 @@ namespace nglab
             bool unlock(secure_vector<uint8_t>& password) override;
         private:
             std::unique_ptr<Botan::RSA_PrivateKey> m_priv_key;
-            vector<uint8_t> m_pub_blob;
 
 
         };

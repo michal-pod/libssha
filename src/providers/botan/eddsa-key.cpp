@@ -131,23 +131,6 @@ namespace nglab
             return std::vector<uint8_t>(blob.begin(), blob.end());
         }
 
-        string EDDSABase::fingerprint() const
-        {
-            // Compute SHA256 hash of the public key blob
-            const auto sha256 = Botan::HashFunction::create_or_throw("SHA-256");
-            sha256->update(m_pub_blob);
-            auto digest = sha256->final();
-
-            // Encode the hash in base64
-            std::string b64 = Botan::base64_encode(digest);
-            
-            while (!b64.empty() && b64.back() == '=') {
-                b64.pop_back();
-            }
-
-            return "SHA256:" + b64;
-        }
-
         void EDDSABase::skipBlob(Deserializer &d)
         {
             d.discardBlob(); // skip pubkey
