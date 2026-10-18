@@ -38,7 +38,7 @@ using nglab::libssha::KeyManager;
 using nglab::libssha::Session;
 using nglab::libssha::secure_vector;
 
-namespace nglab::libssha::test
+namespace nglab::libssha::test::session
 {
     using Bytes = std::vector<uint8_t>;
 

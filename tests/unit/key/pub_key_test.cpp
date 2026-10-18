@@ -22,16 +22,15 @@
 
 using namespace nglab::libssha;
 
+namespace nglab::libssha::test::pub_key
+{
+
 class DummyPubKey : public PubKeyBase {
 public:
     DummyPubKey(const std::vector<uint8_t>& blob)
         : PubKeyBase(blob) {}
 
-    bool verify(const std::vector<uint8_t>& data, const std::vector<uint8_t>& signature) const override {
-        // Accept if signature equals data reversed
-        std::vector<uint8_t> reversed(data.rbegin(), data.rend());
-        return signature == reversed;
-    }
+    bool verify(const std::vector<uint8_t>&, const std::vector<uint8_t>&) const override { return false; }
 
     size_t bits() const override { return 123; }
     std::string family() const override { return "DUMMY"; }
@@ -55,22 +54,4 @@ TEST(PubKeyBaseTest, VisualHostKeyReturnsLines)
     EXPECT_TRUE(lines.front().find("[DUMMY 123]") != std::string::npos);
     EXPECT_TRUE(lines.back().find("SHA256") != std::string::npos);
 }
-
-TEST(PubKeyBaseTest, BitsAndFamily)
-{
-    std::vector<uint8_t> blob(10, 0xAA);
-    DummyPubKey pub(blob);
-    EXPECT_EQ(pub.bits(), 123);
-    EXPECT_EQ(pub.family(), "DUMMY");
-}
-
-TEST(PubKeyBaseTest, VerifySignature)
-{
-    std::vector<uint8_t> blob;
-    DummyPubKey pub(blob);
-    std::vector<uint8_t> data = {1,2,3};
-    std::vector<uint8_t> sig = {3,2,1};
-    EXPECT_TRUE(pub.verify(data, sig));
-    std::vector<uint8_t> bad_sig = {1,2,3};
-    EXPECT_FALSE(pub.verify(data, bad_sig));
-}
+} // namespace nglab::libssha::test::pub_key

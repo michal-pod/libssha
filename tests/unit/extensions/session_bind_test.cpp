@@ -28,7 +28,8 @@ using namespace nglab::libssha;
 
 // session-bind@openssh.com comes from OpenSSH PROTOCOL.agent, it is not part of RFC 9987
 
-namespace {
+namespace nglab::libssha::test::session_bind
+{
 
 class DummyPubKey : public PubKeyBase {
 public:
@@ -77,7 +78,6 @@ std::vector<uint8_t> makeDummySignatureBlob(const std::vector<uint8_t>& session_
     return std::vector<uint8_t>(data.begin(), data.end());
 }
 
-} // namespace
 
 TEST(OpenSSHSessionBindTest, ConstructionAndSetters)
 {
@@ -138,3 +138,4 @@ TEST(OpenSSHSessionBindTest, DeserializeFailsOnBadSignature)
     Deserializer d(data.data(), data.size());
     EXPECT_THROW(ext2.deserialize(d), std::runtime_error);
 }
+} // namespace nglab::libssha::test::session_bind

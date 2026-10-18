@@ -26,6 +26,9 @@
 
 using namespace nglab::libssha;
 
+namespace nglab::libssha::test::add_identity
+{
+
 // Message format: RFC 9987, section 5.2
 
 TEST(AddIdentityMessage, DefaultConstructor)
@@ -154,8 +157,6 @@ TEST(AddIdentityMessage, ContructorWithConstrains)
     EXPECT_EQ(msg.lifetime(), 123u);
 }
 
-namespace
-{
     constexpr char RestrictDestinationName[] = "restrict-destination-v00@openssh.com";
 
     std::vector<uint8_t> hopBlob(const std::string &hostname, const std::vector<uint8_t> &key)
@@ -220,7 +221,6 @@ namespace
         Message base_msg(bytes.data(), bytes.size());
         AddIdentityMessage msg(base_msg);
     }
-}
 
 // RFC 9987, section 5.2: SSH_AGENTC_ADD_IDENTITY ends with the comment, constraints need ADD_ID_CONSTRAINED
 TEST(AddIdentityMessage, DataAfterCommentInPlainAddThrows)
@@ -253,3 +253,4 @@ TEST(AddIdentityMessage, EachConstraintOnceInAnyOrderParses)
     EXPECT_NO_THROW(parseAddIdentity(SSH_AGENTC_ADD_IDENTITY_CONSTRAINED,
                                      [](Serializer &s) { appendRestrictDestination(s); appendLifetime(s, 60); appendConfirm(s); }));
 }
+} // namespace nglab::libssha::test::add_identity

@@ -23,9 +23,9 @@
 #include <thread>
 #include <chrono>
 
-namespace {
+namespace nglab::libssha::test::key
+{
     constexpr const char type_name[] = "dummy-type";
-}
 
 class DummyKey : public nglab::libssha::Key<DummyKey, type_name>
 {
@@ -34,19 +34,8 @@ public:
     std::vector<uint8_t> pubBlob() override { return std::vector<uint8_t>{0x01, 0x02, 0x03}; }
     std::string fingerprint([[maybe_unused]] nglab::libssha::PubKeyBase::FingerprintFormat type = nglab::libssha::PubKeyBase::FingerprintFormat::Sha256Base64) const override { return "dummy-fingerprint"; }
     std::vector<uint8_t> sign([[maybe_unused]] const std::vector<uint8_t> &data, [[maybe_unused]] uint32_t flags) const override { return std::vector<uint8_t>{0x04, 0x05, 0x06}; }
-    void lock(nglab::libssha::secure_vector<uint8_t>& password) override {
-        // FIXME: implement key locking
-        locked = true;
-        last_password = password;
-    }
-    bool unlock(nglab::libssha::secure_vector<uint8_t>& password) override {
-        // FIXME: implement key unlocking
-        locked = false;
-        last_password = password;
-        return true;
-    }
-    bool locked = false;
-    nglab::libssha::secure_vector<uint8_t> last_password;
+    void lock(nglab::libssha::secure_vector<uint8_t>&) override {}
+    bool unlock(nglab::libssha::secure_vector<uint8_t>&) override { return true; }
 };
 
 TEST(KeyBaseTest, CommentGetterSetter)
@@ -61,7 +50,7 @@ TEST(KeyBaseTest, LifetimeAndExpired)
     DummyKey key;
     key.setLifetime(1); // 1 second lifetime
     EXPECT_FALSE(key.expired());
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
     EXPECT_TRUE(key.expired());
 }
 
@@ -74,16 +63,5 @@ TEST(KeyBaseTest, ConfirmRequiredFlag)
     EXPECT_FALSE(key.confirmRequired());
 }
 
-TEST(KeyBaseTest, LockUnlockStub)
-{
-    DummyKey key;
-    nglab::libssha::secure_vector<uint8_t> pass = {1,2,3};
-    key.lock(pass);
-    EXPECT_TRUE(key.locked);
-    EXPECT_EQ(key.last_password, pass);
-    key.unlock(pass);
-    EXPECT_FALSE(key.locked);
-    EXPECT_EQ(key.last_password, pass);
-}
-
 // Constraints will be tested in integration tests
+} // namespace nglab::libssha::test::key

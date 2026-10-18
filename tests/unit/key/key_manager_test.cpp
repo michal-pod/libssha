@@ -31,6 +31,9 @@
 #include <thread>
 #include <chrono>
 
+namespace nglab::libssha::test::key_manager
+{
+
 // Public key of the ed25519 test key with a seed filled with key_byte
 std::vector<uint8_t> ed25519_pub_key(uint8_t key_byte) {
     return Botan::Ed25519_PrivateKey::from_seed(std::vector<uint8_t>(32, key_byte)).public_key_bits();
@@ -195,7 +198,7 @@ TEST_F(KeyManagerTestFixture, CleanupExpiredKeysWorks) {
     key1->setLifetime(1); // 1 second
     km.addKey("ssh-ed25519", blob2, "long-lived");
 
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
     km.cleanupExpiredKeys();
 
     auto list = km.listKeys(session);
@@ -275,3 +278,4 @@ TEST_F(KeyManagerTestFixture, LockUnlockCallsKeyMethods) {
     km.unlock(pass);
     EXPECT_FALSE(km.isLocked());
 }
+} // namespace nglab::libssha::test::key_manager

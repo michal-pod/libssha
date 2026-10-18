@@ -25,7 +25,8 @@ using namespace nglab::libssha;
 
 // publickey-hostbound-v00@openssh.com comes from OpenSSH PROTOCOL, it is not part of RFC 9987
 
-namespace {
+namespace nglab::libssha::test::userauth
+{
 
 std::vector<uint8_t> makeValidUserAuthRequest(
     const std::vector<uint8_t>& session_id,
@@ -151,4 +152,4 @@ TEST(UserAuthRequestMessageTest, ThrowsOnUnsupportedServiceOrMethodOrSignature)
     }
 }
 
-} // namespace
+} // namespace nglab::libssha::test::userauth

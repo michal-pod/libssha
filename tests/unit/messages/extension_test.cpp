@@ -27,6 +27,9 @@
 
 using namespace nglab::libssha;
 
+namespace nglab::libssha::test::extension
+{
+
 // Message format: RFC 9987, section 5.8
 
 // Dummy extension for testing
@@ -43,7 +46,6 @@ public:
 };
 
 // Register dummy extension type for tests
-namespace {
 const char dummy_ext_name[] = "dummy-ext";
 struct DummyExtensionRegistration {
     DummyExtensionRegistration() {
@@ -55,7 +57,6 @@ struct DummyExtensionRegistration {
         );
     }
 } dummy_extension_registration;
-}
 
 TEST(ExtensionMessageTest, DefaultConstructor) {
     ExtensionMessage msg;
@@ -118,3 +119,4 @@ TEST(ExtensionMessageTest, ConstructFromMessageNoDataThrows) {
     Message empty_msg({0x00, 0x00, 0x00, 0x01, SSH_AGENTC_EXTENSION}); // Message with no data
     EXPECT_THROW(ExtensionMessage parsed(empty_msg), std::runtime_error);
 }
+} // namespace nglab::libssha::test::extension
