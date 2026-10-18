@@ -56,7 +56,14 @@ namespace nglab
 
             log.vdebug("Host key type: {}, fingerprint: {}", key_type, pubkey->fingerprint());
             
-            if(m_signature.size() > 0) {
+            if (m_session_id.empty() || m_session_id.size() > MaxSessionIdLength)
+            {
+                log.error("Invalid session ID length {}", m_session_id.size());
+                throw std::runtime_error("OpenSSHSessionBind: invalid session ID length");
+            }
+
+            // The signature proves that the session belongs to the host key, it is always required
+            {
                 Deserializer d_sig(m_signature);
                 std::string sig_type = d_sig.readString();
                 auto sig_blob = d_sig.readBlob();

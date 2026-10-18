@@ -44,7 +44,10 @@ namespace nglab
             auto service_name = d.readString();            
             auto method_name = d.readString();            
             bool has_signature = d.readByte() != 0;
-            if(service_name != "ssh-connection" || method_name != "publickey-hostbound-v00@openssh.com" || !has_signature)
+            // As parse_userauth_request() in OpenSSH ssh-agent.c, servers without the
+            // hostbound method send no host key
+            const bool hostbound = method_name == "publickey-hostbound-v00@openssh.com";
+            if(service_name != "ssh-connection" || (!hostbound && method_name != "publickey") || !has_signature)
             {
                 log.error("unsupported service/method/signature: {}/{}/{}", service_name, method_name, has_signature);
                 throw std::runtime_error("UserAuthRequestMessage: unsupported service/method/signature");
@@ -52,7 +55,16 @@ namespace nglab
             
             m_key_type = d.readString();           
             m_public_key = d.readBlob();            
-            m_server_host_key = d.readBlob();            
+            if (hostbound)
+            {
+                m_server_host_key = d.readBlob();
+            }
+
+            if (d.remaining() > 0)
+            {
+                log.error("unexpected data after the request");
+                throw std::runtime_error("UserAuthRequestMessage: unexpected data after the request");
+            }
         }
     } // namespace libssha
 } // namespace nglab

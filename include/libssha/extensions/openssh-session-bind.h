@@ -44,6 +44,11 @@ namespace nglab
                                    public LogEnabler
         {
         public:
+            /**
+             * @brief Maximum length of the session ID, AGENT_MAX_SID_LEN in OpenSSH ssh-agent.c
+             */
+            static constexpr size_t MaxSessionIdLength = 128;
+
         /**
          * @brief Construct a new OpenSSHSessionBind object
          */

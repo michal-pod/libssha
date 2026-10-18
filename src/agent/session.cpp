@@ -343,6 +343,13 @@ namespace nglab
 
                     UserAuthRequestMessage userauth_msg(sign_msg.data());
 
+                    // As parse_userauth_request() in OpenSSH ssh-agent.c
+                    if (userauth_msg.publicKey() != sign_msg.keyBlob())
+                    {
+                        log.warning("refusing sign request: user authentication is for another key");
+                        throw std::runtime_error("User authentication request is for another key");
+                    }
+
                     if (!key->permitted(*this, userauth_msg.username(), m_match_info))
                     {
                         log.warning("Key not permitted by destination constraints");
@@ -357,6 +364,20 @@ namespace nglab
                     else
                     {
                         log.debug("Session ID matches a session binding");
+                    }
+
+                    // As process_sign_request2() in OpenSSH ssh-agent.c: the host key has to be the
+                    // most recently bound one, only the first hop may leave it out (publickey method)
+                    const auto &host_key = userauth_msg.serverHostKey();
+                    if (host_key.empty() && m_session_bindings.size() > 1)
+                    {
+                        log.warning("refusing sign request: no host key for a forwarded connection");
+                        throw std::runtime_error("No host key in user authentication request");
+                    }
+                    if (!host_key.empty() && host_key != m_session_bindings.back().host_key)
+                    {
+                        log.warning("refusing sign request: host key is not the most recently bound one");
+                        throw std::runtime_error("Host key does not match the session binding");
                     }
                 }
                 else
@@ -461,6 +482,29 @@ namespace nglab
                     log.error("Failed to cast extension to OpenSSHSessionBind");
                     throw std::runtime_error("Invalid extension type");
                 }
+                // As process_ext_session_bind() in OpenSSH ssh-agent.c
+                for (const auto &binding : m_session_bindings)
+                {
+                    if (!binding.forwarded)
+                    {
+                        throw std::runtime_error("Session already bound for authentication");
+                    }
+                    if (binding.session_id == ext->sessionID())
+                    {
+                        if (binding.host_key != ext->hostKey())
+                        {
+                            throw std::runtime_error("Session ID already bound to another host key");
+                        }
+                        log.debug("Session ID already bound");
+                        successResponse();
+                        return true;
+                    }
+                }
+                if (m_session_bindings.size() >= MaxSessionBindings)
+                {
+                    throw std::runtime_error("Too many session bindings");
+                }
+
                 m_is_forwarded |= ext->forwarded();
                 m_session_bindings.emplace_back(ext->hostKey(), ext->sessionID(), ext->forwarded());
                 successResponse();

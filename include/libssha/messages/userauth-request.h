@@ -80,7 +80,8 @@ namespace nglab
 
             /**
              * @brief Get the server host key.
-             * @return const std::vector<uint8_t>& The server host key.
+             * @return const std::vector<uint8_t>& The server host key, empty for the
+             *         publickey method, only publickey-hostbound-v00@openssh.com sends it.
              */
             const std::vector<uint8_t>& serverHostKey() const { return m_server_host_key; }
 

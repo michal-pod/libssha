@@ -91,6 +91,11 @@ namespace nglab
             static constexpr size_t MaxQueuedRequests = 16;
 
             /**
+             * @brief Maximum number of session bindings, AGENT_MAX_SESSION_IDS in OpenSSH ssh-agent.c
+             */
+            static constexpr size_t MaxSessionBindings = 16;
+
+            /**
              * @brief Constructor for Session.
              */
             Session();
