@@ -19,8 +19,15 @@
 #include <libssha/extensions/extension-factory.h>
 #include <libssha/extensions/extension.h>
 #include <libssha/key/key-manager.h>
+#include <libssha/key/key-manager-observer.h>
 #include <libssha/messages/message.h>
+#include <libssha/messages/sign-request.h>
+#include <libssha/utils/deserializer.h>
+#include <libssha/utils/serializer.h>
+#include <botan/ed25519.h>
+#include <botan/pubkey.h>
 #include <gtest/gtest.h>
+#include <atomic>
 #include <chrono>
 #include <mutex>
 #include <string>
@@ -48,7 +55,15 @@ namespace nglab::libssha::test
             joinWorkers();
         }
 
-        bool confirmRequest([[maybe_unused]] const KeyBase &key) override { return true; }
+        bool confirmRequest([[maybe_unused]] const KeyBase &key) override
+        {
+            ++m_confirmations;
+            return m_confirm_answer;
+        }
+
+        void setConfirmAnswer(bool answer) { m_confirm_answer = answer; }
+        int confirmations() const { return m_confirmations; }
+
         bool requiresConfirmation(const KeyBasePtr) const override { return false; }
         std::string client() const override { return "recording-client"; }
         bool processExtensionMessage([[maybe_unused]] const ExtensionMessage &msg) override { return false; }
@@ -85,6 +100,26 @@ namespace nglab::libssha::test
     private:
         mutable std::mutex m_mutex;
         std::vector<Bytes> m_responses;
+        std::atomic<bool> m_confirm_answer{true};
+        std::atomic<int> m_confirmations{0};
+    };
+
+    class CountingObserver : public KeyManagerObserver
+    {
+    public:
+        CountingObserver() { KeyManager::registerObserver(this); }
+        ~CountingObserver() { KeyManager::unregisterObserver(this); }
+
+        void onKeyAdded(KeyBasePtr) override {}
+        void onKeyRemoved(KeyBasePtr) override {}
+        void onKeysCleared() override {}
+        void onKeyUsed(KeyBasePtr, const Session *) override { ++used; }
+        void onKeyDeclined(KeyBasePtr, const Session *) override { ++declined; }
+        void onLocked() override {}
+        void onUnlocked() override {}
+
+        std::atomic<int> used{0};
+        std::atomic<int> declined{0};
     };
 
     Bytes frame(const Bytes &body)
@@ -117,6 +152,107 @@ namespace nglab::libssha::test
     const Bytes ExtensionFailureReply{0, 0, 0, 1, SSH_AGENT_EXTENSION_FAILURE};
     const Bytes EmptyIdentitiesReply{0, 0, 0, 5, SSH_AGENT_IDENTITIES_ANSWER, 0, 0, 0, 0};
     const Bytes UnknownRequest = frame({0xF0}); // 240-255 are private use (RFC 9987, section 8.1.1)
+    const std::string Passphrase = "session-test";
+    const Bytes SignedData{'d', 'a', 't', 'a'};
+
+    // Ed25519 key derived from a fixed seed, so the public part matches the private one
+    struct TestKey
+    {
+        Bytes seed;
+        Bytes pub;
+        Bytes pubBlob; // RFC 9987, section 5.3
+    };
+
+    TestKey ed25519Key(uint8_t seedByte)
+    {
+        TestKey key;
+        key.seed = Bytes(32, seedByte);
+        key.pub = Botan::Ed25519_PrivateKey::from_seed(key.seed).public_key_bits();
+        Serializer s;
+        s.writeString("ssh-ed25519");
+        s.writeBlob(key.pub);
+        key.pubBlob = s.data();
+        return key;
+    }
+
+    // RFC 9987, sections 5.2.3 and 5.2.7, `constraints` fills the part after the comment
+    template <typename Fn>
+    Bytes addIdentityFrame(uint8_t type, const std::string &keyType, const TestKey &key, Fn constraints)
+    {
+        Serializer s;
+        s.writeByte(type);
+        s.writeString(keyType);
+        s.writeBlob(key.pub);
+        Bytes privateKey(key.seed);
+        privateKey.insert(privateKey.end(), key.pub.begin(), key.pub.end());
+        s.writeBlob(privateKey);
+        s.writeString("test-key");
+        constraints(s);
+        return frame(s.data());
+    }
+
+    Bytes addIdentityFrame(const TestKey &key)
+    {
+        return addIdentityFrame(SSH_AGENTC_ADD_IDENTITY, "ssh-ed25519", key, [](Serializer &) {});
+    }
+
+    Bytes addConfirmedIdentityFrame(const TestKey &key)
+    {
+        return addIdentityFrame(SSH_AGENTC_ADD_IDENTITY_CONSTRAINED, "ssh-ed25519", key,
+                                [](Serializer &s) { s.writeByte(SSH_AGENT_CONSTRAIN_CONFIRM); });
+    }
+
+    Bytes keyBlobFrame(uint8_t type, const Bytes &keyBlob)
+    {
+        Serializer s;
+        s.writeByte(type);
+        s.writeBlob(keyBlob);
+        return frame(s.data());
+    }
+
+    Bytes signFrame(const Bytes &keyBlob, uint32_t flags = 0)
+    {
+        Serializer s;
+        s.writeByte(SSH_AGENTC_SIGN_REQUEST);
+        s.writeBlob(keyBlob);
+        s.writeBlob(SignedData);
+        s.writeBE32(flags);
+        return frame(s.data());
+    }
+
+    Bytes passphraseFrame(uint8_t type, const std::string &passphrase)
+    {
+        Serializer s;
+        s.writeByte(type);
+        s.writeString(passphrase);
+        return frame(s.data());
+    }
+
+    Bytes identitiesReply(const TestKey &key)
+    {
+        Serializer s;
+        s.writeByte(SSH_AGENT_IDENTITIES_ANSWER);
+        s.writeBE32(1);
+        s.writeBlob(key.pubBlob);
+        s.writeString("test-key");
+        return frame(s.data());
+    }
+
+    // Checks that `reply` is SSH_AGENT_SIGN_RESPONSE with a valid signature of SignedData
+    void expectValidSignature(const Bytes &reply, const TestKey &key)
+    {
+        ASSERT_GT(reply.size(), 5u);
+        ASSERT_EQ(reply[4], SSH_AGENT_SIGN_RESPONSE);
+        Deserializer response(reply.data() + 5, reply.size() - 5);
+        const Bytes signatureBlob = response.readBlob();
+        Deserializer signature(signatureBlob.data(), signatureBlob.size());
+        EXPECT_EQ(signature.readString(), "ssh-ed25519");
+        const Bytes signatureBits = signature.readBlob();
+
+        Botan::Ed25519_PublicKey publicKey(key.pub);
+        Botan::PK_Verifier verifier(publicKey, "");
+        EXPECT_TRUE(verifier.verify_message(SignedData, signatureBits));
+    }
 
     constexpr char unhandled_ext_name[] = "unhandled@example.com";
 
@@ -150,8 +286,7 @@ namespace nglab::libssha::test
 
         static secure_vector<uint8_t> passphrase()
         {
-            const std::string text = "session-test";
-            return secure_vector<uint8_t>(text.begin(), text.end());
+            return secure_vector<uint8_t>(Passphrase.begin(), Passphrase.end());
         }
     };
 
@@ -315,5 +450,195 @@ namespace nglab::libssha::test
         ASSERT_TRUE(session.process(extensionFrame("session-bind@openssh.com")));
         EXPECT_EQ(session.responses(), std::vector<Bytes>{ExtensionFailureReply});
         EXPECT_TRUE(session.bindingFailed());
+    }
+
+    // RFC 9987, sections 5.2 and 5.5: SUCCESS for a loaded key, which is then listed
+    TEST_F(SessionTestFixture, AddedIdentityIsListed)
+    {
+        RecordingSession session(false);
+        const auto key = ed25519Key(1);
+
+        ASSERT_TRUE(session.process(addIdentityFrame(key)));
+        ASSERT_TRUE(session.process(frame({SSH_AGENTC_REQUEST_IDENTITIES})));
+        EXPECT_EQ(session.responses(), (std::vector<Bytes>{SuccessReply, identitiesReply(key)}));
+    }
+
+    // RFC 9987, section 5.2: FAILURE for an unrecognised key type
+    TEST_F(SessionTestFixture, UnknownKeyTypeIsRefused)
+    {
+        RecordingSession session(false);
+
+        ASSERT_TRUE(session.process(addIdentityFrame(SSH_AGENTC_ADD_IDENTITY, "unknown@example.com", ed25519Key(1),
+                                                     [](Serializer &) {})));
+        ASSERT_TRUE(session.process(frame({SSH_AGENTC_REQUEST_IDENTITIES})));
+        EXPECT_EQ(session.responses(), (std::vector<Bytes>{FailureReply, EmptyIdentitiesReply}));
+    }
+
+    // RFC 9987, section 5.2.7: an unrecognised constraint refuses the whole request
+    TEST_F(SessionTestFixture, UnknownConstraintIsRefused)
+    {
+        RecordingSession session(false);
+        const auto key = ed25519Key(1);
+        const auto addConstrained = [&key](auto constraints)
+        { return addIdentityFrame(SSH_AGENTC_ADD_IDENTITY_CONSTRAINED, "ssh-ed25519", key, constraints); };
+
+        // 0 is reserved (section 8.2), 3 is not assigned
+        ASSERT_TRUE(session.process(addConstrained([](Serializer &s) { s.writeByte(0); })));
+        ASSERT_TRUE(session.process(addConstrained([](Serializer &s) { s.writeByte(3); })));
+        ASSERT_TRUE(session.process(addConstrained([](Serializer &s)
+                                                   {
+                                                       s.writeByte(SSH_AGENT_CONSTRAIN_EXTENSION);
+                                                       s.writeString("unknown@example.com");
+                                                   })));
+        ASSERT_TRUE(session.process(frame({SSH_AGENTC_REQUEST_IDENTITIES})));
+        EXPECT_EQ(session.responses(), (std::vector<Bytes>{FailureReply, FailureReply, FailureReply, EmptyIdentitiesReply}));
+    }
+
+    // RFC 9987, section 5.2: re-adding a key replaces its constraints
+    TEST_F(SessionTestFixture, ReAddedKeyReplacesConstraints)
+    {
+        RecordingSession session(false);
+        const auto key = ed25519Key(1);
+
+        ASSERT_TRUE(session.process(addConfirmedIdentityFrame(key)));
+        ASSERT_TRUE(session.process(addIdentityFrame(key)));
+        ASSERT_TRUE(session.process(signFrame(key.pubBlob)));
+
+        const auto responses = session.responses();
+        ASSERT_EQ(responses.size(), 3u);
+        EXPECT_EQ(responses[1], SuccessReply);
+        expectValidSignature(responses[2], key);
+        EXPECT_EQ(session.confirmations(), 0);
+    }
+
+    // RFC 9987, section 5.4: SUCCESS when the key was deleted, FAILURE when it was not found
+    TEST_F(SessionTestFixture, RemoveIdentityRemovesOnlyKnownKey)
+    {
+        RecordingSession session(false);
+        const auto key = ed25519Key(1);
+
+        ASSERT_TRUE(session.process(addIdentityFrame(key)));
+        ASSERT_TRUE(session.process(keyBlobFrame(SSH_AGENTC_REMOVE_IDENTITY, key.pubBlob)));
+        ASSERT_TRUE(session.process(keyBlobFrame(SSH_AGENTC_REMOVE_IDENTITY, key.pubBlob)));
+        ASSERT_TRUE(session.process(frame({SSH_AGENTC_REQUEST_IDENTITIES})));
+        EXPECT_EQ(session.responses(), (std::vector<Bytes>{SuccessReply, SuccessReply, FailureReply, EmptyIdentitiesReply}));
+    }
+
+    // RFC 9987, section 5.6: SSH_AGENT_SIGN_RESPONSE with the signature
+    TEST_F(SessionTestFixture, SignRequestIsAnswered)
+    {
+        RecordingSession session(false);
+        const auto key = ed25519Key(1);
+
+        ASSERT_TRUE(session.process(addIdentityFrame(key)));
+        ASSERT_TRUE(session.process(signFrame(key.pubBlob)));
+
+        const auto responses = session.responses();
+        ASSERT_EQ(responses.size(), 2u);
+        expectValidSignature(responses[1], key);
+    }
+
+    // RFC 9987, section 5.6: FAILURE when there is no such key
+    TEST_F(SessionTestFixture, SignRequestForUnknownKeyFails)
+    {
+        RecordingSession session(false);
+
+        ASSERT_TRUE(session.process(addIdentityFrame(ed25519Key(1))));
+        ASSERT_TRUE(session.process(signFrame(ed25519Key(2).pubBlob)));
+        EXPECT_EQ(session.responses(), (std::vector<Bytes>{SuccessReply, FailureReply}));
+    }
+
+    // RFC 9987, sections 5.6 and 5.6.1: unsupported flags get FAILURE, without asking the user
+    TEST_F(SessionTestFixture, SignRequestWithUnsupportedFlagsFails)
+    {
+        RecordingSession session(false);
+        const auto key = ed25519Key(1);
+
+        ASSERT_TRUE(session.process(addConfirmedIdentityFrame(key)));
+        ASSERT_TRUE(session.process(signFrame(key.pubBlob, SSH_AGENT_RSA_SHA2_256)));
+        EXPECT_EQ(session.responses(), (std::vector<Bytes>{SuccessReply, FailureReply}));
+        EXPECT_EQ(session.confirmations(), 0);
+    }
+
+    // RFC 9987, sections 5.2.7.2 and 5.6: FAILURE when the user declines the confirmation
+    TEST_F(SessionTestFixture, DeclinedConfirmationFailsSignRequest)
+    {
+        RecordingSession session(false);
+        CountingObserver observer;
+        const auto key = ed25519Key(1);
+        session.setConfirmAnswer(false);
+
+        ASSERT_TRUE(session.process(addConfirmedIdentityFrame(key)));
+        ASSERT_TRUE(session.process(signFrame(key.pubBlob)));
+        EXPECT_EQ(session.responses(), (std::vector<Bytes>{SuccessReply, FailureReply}));
+        EXPECT_EQ(session.confirmations(), 1);
+        EXPECT_EQ(observer.declined, 1);
+        EXPECT_EQ(observer.used, 0);
+    }
+
+    // RFC 9987, section 5.2.7.2: each private key operation is confirmed
+    TEST_F(SessionTestFixture, ConfirmedSignRequestIsAnswered)
+    {
+        RecordingSession session(false);
+        CountingObserver observer;
+        const auto key = ed25519Key(1);
+
+        ASSERT_TRUE(session.process(addConfirmedIdentityFrame(key)));
+        ASSERT_TRUE(session.process(signFrame(key.pubBlob)));
+        ASSERT_TRUE(session.process(signFrame(key.pubBlob)));
+
+        const auto responses = session.responses();
+        ASSERT_EQ(responses.size(), 3u);
+        expectValidSignature(responses[1], key);
+        expectValidSignature(responses[2], key);
+        EXPECT_EQ(session.confirmations(), 2);
+        EXPECT_EQ(observer.used, 2);
+        EXPECT_EQ(observer.declined, 0);
+    }
+
+    // RFC 9987, section 5.7: FAILURE when locking a locked agent
+    TEST_F(SessionTestFixture, LockingLockedAgentFails)
+    {
+        RecordingSession session(false);
+
+        ASSERT_TRUE(session.process(passphraseFrame(SSH_AGENTC_LOCK, Passphrase)));
+        ASSERT_TRUE(session.process(passphraseFrame(SSH_AGENTC_LOCK, Passphrase)));
+        ASSERT_TRUE(session.process(passphraseFrame(SSH_AGENTC_UNLOCK, Passphrase)));
+        EXPECT_EQ(session.responses(), (std::vector<Bytes>{SuccessReply, FailureReply, SuccessReply}));
+        EXPECT_FALSE(KeyManager::instance().isLocked());
+    }
+
+    // RFC 9987, section 5.7: FAILURE when the agent is not locked or the passphrase does not match
+    TEST_F(SessionTestFixture, UnlockNeedsLockedAgentAndSamePassphrase)
+    {
+        RecordingSession session(false);
+
+        ASSERT_TRUE(session.process(passphraseFrame(SSH_AGENTC_UNLOCK, Passphrase)));
+        ASSERT_TRUE(session.process(passphraseFrame(SSH_AGENTC_LOCK, Passphrase)));
+        // One failed attempt only, more would start the unlock delay (section 10)
+        ASSERT_TRUE(session.process(passphraseFrame(SSH_AGENTC_UNLOCK, "wrong")));
+        EXPECT_TRUE(KeyManager::instance().isLocked());
+        ASSERT_TRUE(session.process(passphraseFrame(SSH_AGENTC_UNLOCK, Passphrase)));
+        EXPECT_EQ(session.responses(), (std::vector<Bytes>{FailureReply, SuccessReply, FailureReply, SuccessReply}));
+        EXPECT_FALSE(KeyManager::instance().isLocked());
+    }
+
+    // RFC 9987, section 5.7: a locked agent MUST suspend signing, the key works again after unlocking
+    TEST_F(SessionTestFixture, LockedAgentRefusesSignRequest)
+    {
+        RecordingSession session(false);
+        const auto key = ed25519Key(1);
+
+        ASSERT_TRUE(session.process(addIdentityFrame(key)));
+        ASSERT_TRUE(session.process(passphraseFrame(SSH_AGENTC_LOCK, Passphrase)));
+        ASSERT_TRUE(session.process(signFrame(key.pubBlob)));
+        ASSERT_TRUE(session.process(passphraseFrame(SSH_AGENTC_UNLOCK, Passphrase)));
+        ASSERT_TRUE(session.process(signFrame(key.pubBlob)));
+
+        const auto responses = session.responses();
+        ASSERT_EQ(responses.size(), 5u);
+        EXPECT_EQ((std::vector<Bytes>(responses.begin(), responses.begin() + 4)),
+                  (std::vector<Bytes>{SuccessReply, SuccessReply, FailureReply, SuccessReply}));
+        expectValidSignature(responses[4], key);
     }
 }
